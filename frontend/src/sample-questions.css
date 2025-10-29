@@ -1,0 +1,134 @@
+/* Sample Questions Section Styling */
+.sample-questions {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 25px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border-left: 5px solid #667eea;
+}
+
+.sample-questions h4 {
+  color: #1a202c;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sample-questions h4::before {
+  content: "💡";
+  font-size: 20px;
+}
+
+.sample-questions > p {
+  color: #4a5568;
+  font-size: 14px;
+  margin: 0 0 15px 0;
+  font-style: italic;
+}
+
+.question-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sample-question-btn {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #2d3748;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.sample-question-btn:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  transform: translateX(5px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.sample-question-btn:active {
+  transform: translateX(3px);
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
+}
+
+.sample-question-btn::before {
+  content: "→ ";
+  margin-right: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sample-question-btn:hover::before {
+  opacity: 1;
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+  .sample-questions {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .sample-questions h4 {
+    font-size: 16px;
+  }
+
+  .sample-question-btn {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sample-questions {
+    padding: 12px;
+    margin-bottom: 15px;
+  }
+
+  .sample-questions h4 {
+    font-size: 15px;
+  }
+
+  .sample-question-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
+/* Dark mode support */
+.dark .sample-questions {
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  border-left-color: #9f7aea;
+}
+
+.dark .sample-questions h4 {
+  color: #f7fafc;
+}
+
+.dark .sample-questions > p {
+  color: #cbd5e0;
+}
+
+.dark .sample-question-btn {
+  background: #2d3748;
+  border-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.dark .sample-question-btn:hover {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
