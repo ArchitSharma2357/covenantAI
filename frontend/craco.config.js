@@ -1,3 +1,10 @@
+// craco.config.js
+const path = require("path");
+
 module.exports = {
-  // Default CRACO config. Add customizations if needed.
+  webpack: {
+    alias: {
+      "@": path.resolve(__dirname, "src/"),
+    },
+  },
 };
