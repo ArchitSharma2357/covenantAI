@@ -202,10 +202,6 @@ try:
     logging.info(f"MongoDB client initialized for database: {db_name}")
     logging.info("MongoDB connection will be tested on first use")
     
-    # Add event handlers for connection states
-    client.add_server_changed_listener(lambda event: 
-        logging.info(f"MongoDB server state changed: {event.new_description.server_type}")
-    )
 except Exception as e:
     logging.error(f"Failed to initialize MongoDB client: {str(e)}")
     logging.error("Application will continue but database operations will fail")
