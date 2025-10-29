@@ -1,7 +1,6 @@
 [build]
-# Install Python dependencies during build
-builder = "python"
-requirements = "requirements.txt"
+builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
 
 [deploy]
 startCommand = "cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT"
