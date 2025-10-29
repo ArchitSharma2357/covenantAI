@@ -34,7 +34,6 @@ gTTS==2.4.0
 
 # Utilities
 python-multipart==0.0.6
-difflib2==0.0.0
 
 # Optional / OCR and document helpers (used by server.py fallbacks)
 # Note: these Python packages are wrappers; OCR requires system binaries (tesseract) and
