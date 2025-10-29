@@ -1,10 +1,16 @@
 // craco.config.js
-const path = require("path");
+const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
 
 module.exports = {
   webpack: {
-    alias: {
-      "@": path.resolve(__dirname, "src/"),
+    configure: (webpackConfig, { env, paths }) => {
+      if (env === "production") {
+        // Remove ReactRefreshPlugin if present
+        webpackConfig.plugins = webpackConfig.plugins.filter(
+          (plugin) => plugin.constructor.name !== 'ReactRefreshWebpackPlugin'
+        );
+      }
+      return webpackConfig;
     },
   },
 };
