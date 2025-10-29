@@ -26,7 +26,7 @@ requests==2.31.0
 
 # Authentication and Security
 passlib==1.7.4
-PyJWT==2.8.1
+PyJWT==2.10.1
 bcrypt==4.1.1
 
 # Text-to-Speech
