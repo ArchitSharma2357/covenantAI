@@ -10,7 +10,7 @@ httpx>=0.24.1
 pdfminer.six>=20221105
 python-docx>=0.8.11
 python-jose[cryptography]>=3.3.0
-PyJWT==2.8.1
+PyJWT==2.10.1
 passlib[bcrypt]>=1.7.4
 fpdf>=1.7.2
 starlette>=0.27.0
