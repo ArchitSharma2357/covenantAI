@@ -438,7 +438,7 @@ const ChatPage = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">Document:</span>
                     <div>
-                      <button onClick={() => fileInputRef.current?.click()} className="text-sm text-primary hover:underline">Perform ANALYSIS firstly!</button>
+                      <button onClick={() => fileInputRef.current?.click()} className="text-sm text-primary hover:underline">Upload</button>
                     </div>
                   </div>
 
@@ -470,7 +470,7 @@ const ChatPage = () => {
                         <span className="text-sm text-green-600">Document processed successfully!</span>
                       )}
                       {uploadProgress.status === 'error' && (
-                        <span className="text-sm text-red-600">Error processing document. Please try again.</span>
+                        <span className="text-sm text-red-600">Note: OCR may fail — please paste the text here!</span>
                       )}
                     </div>
                   ) : documents.length === 0 ? (
