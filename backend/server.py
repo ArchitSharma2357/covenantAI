@@ -130,8 +130,10 @@ def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body
             logging.debug("RESEND_API_KEY not set, cannot send via Resend")
             return False
 
+        # Always use no-reply@waterbears.in as sender
+        sender = 'no-reply@waterbears.in'
         payload = {
-            "from": from_email or os.environ.get('SMTP_FROM', 'CovenantAI <no-reply@waterbears.in>'),
+            "from": sender,
             "to": [to_email],
             "subject": subject,
             "html": html_body,
