@@ -50,6 +50,27 @@ ROOT_DIR = Path(__file__).parent
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Reduce noise from very chatty third-party libraries (pdfminer, urllib3, pdf2image, pytesseract)
+# These emit DEBUG logs that can flood deployment logs and hit provider rate limits.
+for noisy in [
+    "pdfminer",
+    "pdfminer.psparser",
+    "pdfminer.pdfinterp",
+    "pdfminer.high_level",
+    "pdfminer.layout",
+    "pdfminer.psparser",
+    "pdfminer.pdfparser",
+    "pdf2image",
+    "PIL",
+    "pytesseract",
+    "urllib3",
+    "httpx",
+]:
+    try:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+    except Exception:
+        pass
+
 # Load environment variables first
 load_dotenv(ROOT_DIR / '.env')
 logging.info("Environment variables loaded")
