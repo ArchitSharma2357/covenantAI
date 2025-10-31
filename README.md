@@ -86,8 +86,8 @@ We aim to democratize legal understanding by offering:
 
 ```bash
 # Clone the repo
-git clone https://github.com/sarthakparouha-byte/Legal-Document-AI-Simplifier.git
-cd Legal-Document-AI-Simplifier
+git clone https://github.com/ArchitSharma2357/covenantAI
+cd covenantAI
 
 # Backend setup
 cd backend
