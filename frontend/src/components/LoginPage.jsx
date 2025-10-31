@@ -48,7 +48,7 @@ const LoginPage = ({ onLogin }) => {
   const handleGoogleSignIn = async () => {
     try {
       // Get the auth URL from backend
-      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000'}/api/auth/google`);
+      const response = await fetch(`${process.env.REACT_APP_BACKEND_URL || 'https://backendcovenentai.up.railway.app'}/api/auth/google`);
       const data = await response.json();
 
       // Redirect to Google OAuth
@@ -67,7 +67,7 @@ const LoginPage = ({ onLogin }) => {
       return;
     }
     try {
-      const base = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+      const base = process.env.REACT_APP_BACKEND_URL || 'https://backendcovenentai.up.railway.app';
       const resp = await fetch(`${base}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,5 +185,6 @@ const LoginPage = ({ onLogin }) => {
     </div>
   );
 };
+
 
 export default LoginPage;
