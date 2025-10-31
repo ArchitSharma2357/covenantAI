@@ -350,44 +350,17 @@ async def start_mongodb_monitor():
 cors_origins_env = os.environ.get('CORS_ORIGINS')
 railway_url = os.environ.get('RAILWAY_STATIC_URL')  # Railway provides this
 
-# Build list of allowed origins
-allow_origins = []
-frontend_prod_url = "https://covenant.up.railway.app"
-if cors_origins_env:
-    # Add configured origins
-    allow_origins.extend([o.strip() for o in cors_origins_env.split(',') if o.strip()])
-if railway_url:
-    # Add Railway URL if available
-    allow_origins.append(railway_url)
-    # Also add HTTPS version if HTTP is provided, and vice versa
-    if railway_url.startswith('https://'):
-        allow_origins.append(f"http://{railway_url[8:]}")
-    elif railway_url.startswith('http://'):
-        allow_origins.append(f"https://{railway_url[7:]}")
-allow_origins.append(frontend_prod_url)
-
-# Add development origins if not in production
-if os.environ.get('NODE_ENV') != 'production':
-    allow_origins.extend([
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001"
-    ])
-
-# Remove duplicates and empty strings
-allow_origins = list(set(filter(None, allow_origins)))
-
-logging.info(f"CORS configured with origins: {allow_origins}")
+origins = [
+    "https://covenant.up.railway.app",
+    "https://backendcovenantai.up.railway.app"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Length", "Content-Range"],
-    max_age=3600,
 )
 
 # Create a router with the /api prefix
