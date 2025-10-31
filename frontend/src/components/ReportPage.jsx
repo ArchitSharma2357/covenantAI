@@ -28,7 +28,7 @@ const ReportPage = ({ analysisResult }) => {
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/export/pdf', {
+      const response = await fetch('https://backendcovenentai.up.railway.app/api/export/pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
