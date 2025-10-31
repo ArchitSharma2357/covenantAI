@@ -20,7 +20,7 @@ const ProfilePage = () => {
           setLoading(false);
           return;
         }
-        const resp = await axios.get('http://localhost:8000/api/auth/me', {
+        const resp = await axios.get('https://backendcovenentai.up.railway.app/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setUser(resp.data);
@@ -29,7 +29,7 @@ const ProfilePage = () => {
         setAvatarData(resp.data.avatar || null);
         // fetch subscription status if available
         try {
-          const subResp = await axios.get('http://localhost:8000/api/auth/subscription', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          const subResp = await axios.get('https://backendcovenentai.up.railway.app/api/auth/subscription', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
           setSubscription(subResp.data || null);
         } catch (err) {
           // no subscription endpoint or not subscribed
@@ -55,7 +55,7 @@ const ProfilePage = () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
-      const resp = await axios.patch('http://localhost:8000/api/auth/me', { name, description, avatar: avatarData }, { headers: { Authorization: `Bearer ${token}` } });
+      const resp = await axios.patch('https://backendcovenentai.up.railway.app/api/auth/me', { name, description, avatar: avatarData }, { headers: { Authorization: `Bearer ${token}` } });
       setUser(resp.data);
       setEditing(false);
     } catch (err) {
