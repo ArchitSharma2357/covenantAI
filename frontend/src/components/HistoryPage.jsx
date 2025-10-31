@@ -235,8 +235,8 @@ const HistoryPage = ({ type = 'user' }) => {
       try {
         const token = localStorage.getItem('token');
         const endpoint = isGuest
-          ? `http://localhost:8000/api/documents/${documentId}/export-pdf?guest=true`
-          : `http://localhost:8000/api/documents/${documentId}/export-pdf`;
+          ? `https://backendcovenentai.up.railway.app/api/documents/${documentId}/export-pdf?guest=true`
+          : `https://backendcovenentai.up.railway.app/api/documents/${documentId}/export-pdf`;
         const headers = isGuest ? {} : { Authorization: `Bearer ${token}` };
         const response = await axios.get(endpoint, {
           responseType: 'blob',
@@ -291,8 +291,8 @@ const HistoryPage = ({ type = 'user' }) => {
         notify('Deleted guest document #' + documentId);
       } else {
         const endpoint = isGuest
-          ? `http://localhost:8000/api/documents/${documentId}?guest=true`
-          : `http://localhost:8000/api/documents/${documentId}`;
+          ? `https://backendcovenentai.up.railway.app/api/documents/${documentId}?guest=true`
+          : `https://backendcovenentai.up.railway.app/api/documents/${documentId}`;
         const headers = isGuest ? {} : { Authorization: `Bearer ${localStorage.getItem('token')}` };
         await axios.delete(endpoint, { headers });
         setHistory(prev => prev.filter(item => item.id !== documentId));
