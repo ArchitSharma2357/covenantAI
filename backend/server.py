@@ -25,9 +25,26 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any
 
 
+# Set up paths
+ROOT_DIR = Path(__file__).parent
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Load environment variables first
+load_dotenv(ROOT_DIR / '.env')
+logging.info("Environment variables loaded")
+
+# Log critical configuration
+mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL')
+if mongo_url:
+    # Log URL without credentials
+    safe_url = mongo_url.split('@')[-1] if '@' in mongo_url else 'mongodb://****'
+    logging.info(f"MONGODB_URL found: mongodb://****@{safe_url}")
+else:
+    logging.warning("No MONGODB_URL or MONGO_URL found in environment")
+
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
@@ -183,11 +200,19 @@ class MongoDBState:
     async def initialize(cls):
         try:
             # Get MongoDB URL from environment variables - Railway provides MONGODB_URL
-            mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL')
+            mongo_url = os.environ.get('MONGODB_URL')
             if not mongo_url:
-                logging.warning("Neither MONGODB_URL nor MONGO_URL set - defaulting to localhost")
-                mongo_url = 'mongodb://localhost:27017'
-            logging.info(f"Connecting to MongoDB at: {mongo_url.split('@')[0]}@****")
+                mongo_url = os.environ.get('MONGO_URL')
+                
+            if not mongo_url:
+                logging.error("No MongoDB connection URL found in environment variables")
+                logging.error("Checked both MONGODB_URL and MONGO_URL")
+                logging.error("Available environment variables: " + ", ".join(sorted(os.environ.keys())))
+                raise Exception("MongoDB connection URL not found in environment")
+                
+            # Log URL without exposing credentials
+            safe_url = mongo_url.split('@')[-1] if '@' in mongo_url else 'mongodb://****'
+            logging.info(f"Initializing MongoDB connection to: mongodb://****@{safe_url}")
             
             # Configure MongoDB clients with optimized settings
             client_settings = {
