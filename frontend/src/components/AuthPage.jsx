@@ -33,7 +33,7 @@ const AuthPage = ({ onLogin, onSignup }) => {
       } else {
         if (showVerification) {
           // Verify email code
-          const response = await fetch('/api/auth/verify', {
+          const response = await fetch('https://backendcovenentai.up.railway.app/api/auth/verify', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -53,7 +53,7 @@ const AuthPage = ({ onLogin, onSignup }) => {
           await onLogin(formData.email, formData.password);
         } else {
           // Send verification code first
-          const response = await fetch('/api/auth/send-verification', {
+          const response = await fetch('https://backendcovenentai.up.railway.app/api/auth/send-verification', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
