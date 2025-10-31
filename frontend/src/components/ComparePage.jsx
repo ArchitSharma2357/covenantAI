@@ -29,7 +29,7 @@ const ComparePage = () => {
       // ensure no auth header carried through
       try { delete client.defaults.headers.common['Authorization']; } catch (e) {}
 
-      const res = await client.post('http://localhost:8000/api/compare', formData, {
+      const res = await client.post('https://backendcovenentai.up.railway.app/api/compare', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setComparison(res.data);
