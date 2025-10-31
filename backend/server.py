@@ -445,9 +445,9 @@ app.add_middleware(
 api_router = APIRouter(prefix="/api")
 add_subscription_endpoint(api_router)
 
-# Create uploads directory
-UPLOAD_DIR = ROOT_DIR / "../uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Create uploads directory (use an absolute resolved path and ensure parents exist)
+UPLOAD_DIR = (ROOT_DIR / "../uploads").resolve()
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Authentication setup with enhanced security and error handling
 pwd_context = CryptContext(
@@ -2442,7 +2442,20 @@ async def upload_document(file: UploadFile = File(...)):
             logging.info(f"Attempting to save file to: {file_path}")
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
+                try:
+                    buffer.flush()
+                    os.fsync(buffer.fileno())
+                except Exception:
+                    # fsync may not be available in some environments; ignore if it fails
+                    pass
             logging.info("File saved successfully")
+            # Extra check: ensure the file is visible on disk and list uploads dir for debugging
+            try:
+                exists = file_path.exists()
+                listing = [p.name for p in UPLOAD_DIR.iterdir()][:20]
+                logging.info(f"Post-save exists={exists}; uploads listing(sample 20)={listing}")
+            except Exception as ex:
+                logging.warning(f"Could not stat uploads dir after save: {ex}")
 
             # Extract text content using enhanced extraction system
             try:
