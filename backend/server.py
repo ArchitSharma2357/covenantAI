@@ -140,22 +140,22 @@ if not os.environ.get('GEMINI_API_KEY'):
 # Create the main app without a prefix
 app = FastAPI()
 
-# Serve static files from frontend build
-static_path = ROOT_DIR.parent / "frontend" / "build" / "static"
-if static_path.exists():
+# Serve static files and assets from frontend build
+build_path = ROOT_DIR.parent / "frontend" / "build"
+static_path = build_path / "static"
+if build_path.exists():
+    # Serve the static directory
     app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+    # Serve other files from the build directory
+    app.mount("/", StaticFiles(directory=str(build_path), html=True), name="frontend")
 
-# Serve frontend index.html for all non-API routes
-@app.get("/{full_path:path}")
-async def serve_frontend(full_path: str):
-    if full_path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="API route not found")
-        
-    index_html = ROOT_DIR.parent / "frontend" / "build" / "index.html"
-    if index_html.exists():
-        return FileResponse(str(index_html))
-    else:
-        return {"error": "Frontend not built"}
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc: HTTPException):
+    if not str(request.url.path).startswith("/api/"):
+        index_html = build_path / "index.html"
+        if index_html.exists():
+            return FileResponse(str(index_html))
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
 
 # MongoDB helper function
 def get_mongo_client():
