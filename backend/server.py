@@ -1013,7 +1013,6 @@ CovenantAI Team
 
             if not valid:
                 logging.error(f"Password check failed for {request.email}")
-                sync_client.close()
                 raise HTTPException(status_code=401, detail="Invalid credentials")
 
         except HTTPException:
@@ -1021,7 +1020,6 @@ CovenantAI Team
             raise
         except Exception as e:
             logging.error(f"Password verification failed: {str(e)}", exc_info=True)
-            sync_client.close()
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         # 🧩 If user email not verified → resend code if needed
@@ -1117,7 +1115,7 @@ CovenantAI Team
         )
         logging.info(f"Access token created successfully")
 
-        sync_client.close()
+    # No sync_client to close here
 
         # Create standardized user response
         user_response = {
@@ -2236,18 +2234,32 @@ async def send_verification(payload: dict = Body(...)):
         smtp_pass = os.environ.get('SMTP_PASS')
         from_email = os.environ.get('SMTP_FROM', smtp_user or 'no-reply@waterbears.in')
 
-        subject = 'Your Verification Code'
+        subject = "Your CovenantAI Verification Code"
+
         body = f"""
-        Hello,
-
-        Your verification code is: {code}
-
-        This code will expire in 15 minutes.
-
-        If you did not request this code, please ignore this email.
-
-        Best regards,
-        LegalDocAI Team
+        <html>
+        <body style="margin:0; padding:0; background-color:#000; color:#fff; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align:center;">
+            <div style="max-width:600px; margin:50px auto; padding:40px; border:1px solid #333; border-radius:12px; background-color:#0a0a0a; box-shadow:0 0 20px rgba(255,255,255,0.05);">
+            
+            <h1 style="font-size:28px; letter-spacing:2px; text-transform:uppercase; margin-bottom:20px; color:#ffffff;">Covenant<span style="color:#888;">AI</span></h1>
+            
+            <p style="font-size:16px; color:#ccc; margin-bottom:30px;">Your access code has been generated.</p>
+            
+            <div style="font-size:32px; letter-spacing:4px; color:#fff; background:#111; border:1px solid #333; padding:15px 0; border-radius:8px; width:80%; margin:0 auto 30px auto;">
+                <strong>{code}</strong>
+            </div>
+            
+            <p style="font-size:14px; color:#888; margin-bottom:30px;">
+                This code will expire in <strong>15 minutes</strong>.<br>
+                If you didn’t request this, you can safely ignore this message.
+            </p>
+            
+            <hr style="border: none; height: 1px; background-color: #222; margin: 40px 0;">
+            
+            <p style="font-size:13px; color:#555; letter-spacing:1px;">— The CovenantAI Team</p>
+            </div>
+        </body>
+        </html>
         """
 
         # Send via Resend only. If Resend is not configured, show the code in logs/console.
