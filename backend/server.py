@@ -153,12 +153,14 @@ async def not_found_handler(request: Request, exc: HTTPException):
 # MongoDB helper function
 def get_mongo_client():
     """Get a MongoDB client with connection verification"""
-    mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+    mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
     try:
         client = pymongo.MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
         # Force a connection to verify it works
         client.server_info()
-        logging.info("MongoDB connection successful")
+        # Log successful connection without exposing credentials
+        safe_url = mongo_url.split('@')[0] + '@****' if '@' in mongo_url else 'mongodb://****'
+        logging.info(f"MongoDB connection successful to {safe_url}")
         return client
     except pymongo.errors.ServerSelectionTimeoutError as e:
         logging.error(f"MongoDB connection timeout: {str(e)}")
@@ -180,10 +182,12 @@ class MongoDBState:
     @classmethod
     async def initialize(cls):
         try:
-            mongo_url = os.environ.get('MONGO_URL')
+            # Get MongoDB URL from environment variables - Railway provides MONGODB_URL
+            mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL')
             if not mongo_url:
-                logging.warning("MONGO_URL not set - defaulting to localhost")
+                logging.warning("Neither MONGODB_URL nor MONGO_URL set - defaulting to localhost")
                 mongo_url = 'mongodb://localhost:27017'
+            logging.info(f"Connecting to MongoDB at: {mongo_url.split('@')[0]}@****")
             
             # Configure MongoDB clients with optimized settings
             client_settings = {
