@@ -177,71 +177,147 @@ def get_mongo_client():
         logging.error(f"MongoDB error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# MongoDB connection
+# MongoDB connection with enhanced error handling and auto-reconnect
+def init_mongodb():
+    try:
+        mongo_url = os.environ.get('MONGO_URL')
+        if not mongo_url:
+            logging.warning("MONGO_URL not set - defaulting to localhost")
+            mongo_url = 'mongodb://localhost:27017'
+        
+        # Configure MongoDB client with optimized settings
+        client = AsyncIOMotorClient(
+            mongo_url, 
+            serverSelectionTimeoutMS=5000,
+            heartbeatFrequencyMS=30000,
+            retryWrites=True,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            maxIdleTimeMS=60000,
+            maxPoolSize=10,
+            retryReads=True,
+            w='majority',  # Write concern for better consistency
+            journal=True,  # Wait for journal commit
+            appname='CovenantAI'  # Identify app in MongoDB logs
+        )
+        
+        db = client[os.environ.get('DB_NAME', 'legal_docs')]
+        db_name = os.environ.get('DB_NAME', 'legal_docs')
+        logging.info(f"MongoDB client initialized for database: {db_name}")
+        
+        return client, db
+        
+    except Exception as e:
+        logging.error(f"MongoDB connection failed: {str(e)}")
+        raise
+
 try:
-    mongo_url = os.environ.get('MONGO_URL')
-    if not mongo_url:
-        logging.warning("MONGO_URL not set - defaulting to localhost")
-        mongo_url = 'mongodb://localhost:27017'
-    
-    # Configure MongoDB client with retry writes and proper timeouts
-    client = AsyncIOMotorClient(
-        mongo_url, 
-        serverSelectionTimeoutMS=5000,
-        heartbeatFrequencyMS=30000,  # Check every 30 seconds instead of 10
-        retryWrites=True,
-        connectTimeoutMS=30000,
-        socketTimeoutMS=30000,
-        maxIdleTimeMS=60000,
-        maxPoolSize=10
-    )
-    db = client[os.environ.get('DB_NAME', 'legal_docs')]
-    
-    # Log connection details (without sensitive info)
-    db_name = os.environ.get('DB_NAME', 'legal_docs')
-    logging.info(f"MongoDB client initialized for database: {db_name}")
-    logging.info("MongoDB connection will be tested on first use")
-    
+    # Initialize MongoDB connection
+    client, db = init_mongodb()
 except Exception as e:
-    logging.error(f"Failed to initialize MongoDB client: {str(e)}")
+    logging.error(f"Failed to initialize MongoDB: {str(e)}")
     logging.error("Application will continue but database operations will fail")
     client = None
     db = None
 
-# Add CORS middleware first. Make origins configurable via environment variables for easier dev/test workflows.
-# - Set CORS_ALLOW_ALL=true to allow all origins (development only). This will set allow_credentials=False
-#   because browsers disallow Access-Control-Allow-Credentials with wildcard origins.
-# - Otherwise, set CORS_ORIGINS to a comma-separated list of allowed origins (e.g. "http://localhost:3000,http://127.0.0.1:3000").
-cors_allow_all = os.environ.get('CORS_ALLOW_ALL', 'false').lower() in ('1', 'true', 'yes')
-cors_origins_env = os.environ.get('CORS_ORIGINS')
-if cors_allow_all:
-    logging.warning('CORS_ALLOW_ALL is enabled: allowing all origins (credentials disabled). Do NOT enable in production.')
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
-        expose_headers=["Content-Length", "Content-Range"],
-        max_age=3600,
-    )
-else:
-    if cors_origins_env:
-        allow_origins = [o.strip() for o in cors_origins_env.split(',') if o.strip()]
-    else:
-        # sensible defaults for local development
-        allow_origins = ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"]
+# Add startup event to create indexes
+@app.on_event("startup")
+async def create_indexes():
+    if db is not None:
+        try:
+            await db.documents.create_index([("user_id", 1)])
+            await db.documents.create_index([("upload_date", -1)])
+            await db.chat_messages.create_index([("user_id", 1)])
+            await db.chat_messages.create_index([("timestamp", -1)])
+            await db.users.create_index([("email", 1)], unique=True)
+            logging.info("MongoDB indexes created successfully")
+        except Exception as e:
+            logging.error(f"Failed to create MongoDB indexes: {str(e)}")
 
-    logging.info(f"CORS configured with allow_credentials=True and allow_origins={allow_origins}")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_credentials=True,
-        allow_origins=allow_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
-        expose_headers=["Content-Length", "Content-Range"],
-        max_age=3600,
-    )
+# Periodic connection check
+async def check_mongodb_connection():
+    while True:
+        try:
+            if client is None or db is None:
+                logging.warning("Attempting to reconnect to MongoDB...")
+                global client, db
+                client, db = init_mongodb()
+                await create_indexes()
+            else:
+                await client.admin.command('ping')
+            await asyncio.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            logging.error(f"MongoDB connection check failed: {str(e)}")
+            await asyncio.sleep(5)  # Wait before retry
+
+# Start connection monitoring
+@app.on_event("startup")
+async def start_mongodb_monitor():
+    asyncio.create_task(check_mongodb_connection())
+
+# Periodic connection check
+async def check_mongodb_connection():
+    while True:
+        try:
+            if client is None or db is None:
+                logging.warning("Attempting to reconnect to MongoDB...")
+                global client, db
+                client, db = await init_mongodb()
+            else:
+                await client.admin.command('ping')
+            await asyncio.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            logging.error(f"MongoDB connection check failed: {str(e)}")
+            await asyncio.sleep(5)  # Wait before retry
+
+# Start connection monitoring
+@app.on_event("startup")
+async def start_mongodb_monitor():
+    asyncio.create_task(check_mongodb_connection())
+
+# CORS Configuration
+# In production, use CORS_ORIGINS environment variable to specify allowed origins
+# In development, allow localhost origins
+cors_origins_env = os.environ.get('CORS_ORIGINS')
+railway_url = os.environ.get('RAILWAY_STATIC_URL')  # Railway provides this
+
+# Build list of allowed origins
+allow_origins = []
+if cors_origins_env:
+    # Add configured origins
+    allow_origins.extend([o.strip() for o in cors_origins_env.split(',') if o.strip()])
+if railway_url:
+    # Add Railway URL if available
+    allow_origins.append(railway_url)
+    # Also add HTTPS version if HTTP is provided, and vice versa
+    if railway_url.startswith('https://'):
+        allow_origins.append(f"http://{railway_url[8:]}")
+    elif railway_url.startswith('http://'):
+        allow_origins.append(f"https://{railway_url[7:]}")
+
+# Add development origins if not in production
+if os.environ.get('NODE_ENV') != 'production':
+    allow_origins.extend([
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+    ])
+
+# Remove duplicates and empty strings
+allow_origins = list(set(filter(None, allow_origins)))
+
+logging.info(f"CORS configured with origins: {allow_origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["Content-Length", "Content-Range"],
+    max_age=3600,
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -250,16 +326,25 @@ api_router = APIRouter(prefix="/api")
 UPLOAD_DIR = ROOT_DIR / "../uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Authentication setup
+# Authentication setup with enhanced security and error handling
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
     bcrypt__default_rounds=12,
-    bcrypt__truncate_error=False  # This will allow truncation instead of raising an error
+    bcrypt__truncate_error=False
 )
-SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_urlsafe(32))
+
+# Get secret key from environment or generate a secure one
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    logging.warning("SECRET_KEY not set in environment - generating a secure random key")
+    SECRET_KEY = secrets.token_urlsafe(32)
+    logging.info("Generated SECRET_KEY (save this for production): " + SECRET_KEY)
+
+# JWT Configuration
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
+MIN_PASSWORD_LENGTH = 8  # Minimum password length requirement
 
 def hash_password(password: str) -> str:
     """Hash a password for storing using bcrypt directly.
