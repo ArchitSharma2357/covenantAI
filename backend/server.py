@@ -1160,19 +1160,31 @@ async def get_history(request: Request):
         documents = list(sync_db.documents.find({"user_id": user_id}).sort("created_at", -1))
         sync_client.close()
 
-        # Format documents for response
+        # Format documents for response, robust to missing/legacy fields
         history = []
         for doc in documents:
+            doc_id = doc.get('id') or str(doc.get('_id', ''))
+            analysis_result = doc.get('analysis_result', {})
+            if isinstance(analysis_result, str):
+                try:
+                    analysis_result = json.loads(analysis_result)
+                except Exception:
+                    analysis_result = {}
+            created_at = doc.get('created_at', '')
+            if isinstance(created_at, datetime):
+                created_at = created_at.isoformat()
+            else:
+                created_at = str(created_at)
             history.append({
-                'id': doc['id'],
+                'id': doc_id,
                 'filename': doc.get('filename', 'Untitled Document'),
                 'document_text': doc.get('document_text', '')[:200] + '...' if len(doc.get('document_text', '')) > 200 else doc.get('document_text', ''),
-                'analysis_result': doc.get('analysis_result', {}),
+                'analysis_result': analysis_result,
                 'summary': doc.get('summary', ''),
                 'risk_score': doc.get('risk_score', {}),
                 'critical_flags': doc.get('critical_flags', []),
                 'analysis_status': doc.get('analysis_status', 'completed'),
-                'created_at': doc.get('created_at', '').isoformat() if isinstance(doc.get('created_at'), datetime) else str(doc.get('created_at', ''))
+                'created_at': created_at
             })
 
         return history
@@ -1224,20 +1236,13 @@ async def get_guest_history():
         # --- 4. Format for response ---
         history = []
         for doc in documents:
-            # Handle missing analysis_result gracefully
-            analysis_result = doc.get("analysis_result")
-            if not analysis_result:
-                raw_summary = doc.get("summary") or ""
-                analysis_result = {}
-                if isinstance(raw_summary, str) and raw_summary.strip().startswith("{"):
-                    try:
-                        analysis_result = json.loads(raw_summary)
-                    except Exception:
-                        analysis_result = {"raw_text": raw_summary}
-                else:
-                    analysis_result = {"raw_text": raw_summary}
-
-            # Normalize upload_date
+            doc_id = doc.get('id') or str(doc.get('_id', ''))
+            analysis_result = doc.get('analysis_result', {})
+            if isinstance(analysis_result, str):
+                try:
+                    analysis_result = json.loads(analysis_result)
+                except Exception:
+                    analysis_result = {}
             upload_date_val = doc.get("upload_date")
             upload_dt = None
             if isinstance(upload_date_val, datetime):
@@ -1247,22 +1252,17 @@ async def get_guest_history():
                     upload_dt = datetime.fromisoformat(upload_date_val)
                 except Exception:
                     upload_dt = None
-
-            # Compute expiry time (10 minutes after upload)
             expires_at = (upload_dt + timedelta(minutes=10)).isoformat() if upload_dt else None
             upload_time_str = upload_dt.isoformat() if upload_dt else (
                 str(upload_date_val) if upload_date_val is not None else ""
             )
-
-            # Append cleaned record
             history.append({
-                "id": str(doc.get("_id", "")),
+                "id": doc_id,
                 "filename": doc.get("filename", "Untitled Document"),
                 "analysis_result": safe_json(analysis_result),
                 "upload_time": upload_time_str,
                 "expires_at": expires_at
             })
-
         return history
 
     except Exception as e:
