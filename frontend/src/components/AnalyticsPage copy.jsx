@@ -62,7 +62,7 @@ const AnalyticsPage = () => {
 
 		try {
 			// POST to backend analyze endpoint
-			const resp = await axios.post('http://localhost:8000/api/analyze', formData, {
+			const resp = await axios.post('https://backendcovenentai.up.railway.app/api/analyze', formData, {
 				headers: { 'Content-Type': 'multipart/form-data' },
 				onUploadProgress: (e) => {
 					if (!e.lengthComputable) return;
@@ -101,7 +101,7 @@ const AnalyticsPage = () => {
 		if (!analysisResult) return;
 		setIsDownloading(true);
 		try {
-			const resp = await axios.post('http://localhost:8000/api/export/pdf', analysisResult, { responseType: 'blob' });
+			const resp = await axios.post('https://backendcovenentai.up.railway.app/api/export/pdf', analysisResult, { responseType: 'blob' });
 			if (resp.status === 200) {
 				const url = window.URL.createObjectURL(new Blob([resp.data]));
 				const a = document.createElement('a');
@@ -128,7 +128,7 @@ const AnalyticsPage = () => {
 			try {
 				const formData = new FormData();
 				formData.append('file', file);
-				const resp = await axios.post('http://localhost:8000/api/analyze', formData);
+				const resp = await axios.post('https://backendcovenentai.up.railway.app/api/analyze', formData);
 				setAnalysisResult(resp.data);
 			} catch (err) {
 				console.warn('analyzeFile handler failed', err);
