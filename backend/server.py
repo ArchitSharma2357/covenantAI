@@ -883,10 +883,25 @@ async def login(request: LoginRequest):
         user = db.users.find_one({"email": request.email})
         logging.info(f"Found user: {user is not None}")
         if user:
-            logging.info(f"User ID: {user.get('id')}")
+            logging.info(f"User ID: {user.get('id', user.get('_id', 'MISSING'))}")
             logging.info(f"Email verified: {user.get('email_verified')}")
-            
+            logging.info(f"User document: {user}")
+        else:
+            logging.warning(f"No user found for email: {request.email}")
         stored_password = user.get('password', '') if user else ''
+
+        # Validate user fields
+        if user:
+            if 'password' not in user or not user['password']:
+                logging.error(f"User record missing password field: {user}")
+                raise HTTPException(status_code=500, detail="User record missing password.")
+            if 'email_verified' not in user:
+                logging.error(f"User record missing email_verified field: {user}")
+                raise HTTPException(status_code=500, detail="User record missing email_verified.")
+            if 'email_verify_code' not in user:
+                logging.warning(f"User record missing email_verify_code field: {user}")
+            if 'email_verify_expires' not in user:
+                logging.warning(f"User record missing email_verify_expires field: {user}")
 
         # 🧩 If user does not exist → auto-register and send verification code
         if not user:
