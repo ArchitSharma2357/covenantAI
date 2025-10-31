@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || 'https://covenantai-production.up.railway.app';
+const API_URL = process.env.REACT_APP_API_URL || 'https://backendcovenentai.up.railway.app';
 
 export const getApiUrl = (path) => {
     // Remove leading slash if present
