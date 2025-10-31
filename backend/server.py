@@ -873,10 +873,7 @@ async def login(request: LoginRequest):
     """Login or auto-register user and send verification if needed"""
     try:
         sync_client = None
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        import logging
+        # logging is already imported globally
 
         logging.info(f"Login attempt for email: {request.email}")
 
@@ -952,7 +949,7 @@ CovenantAI Team
             </div>
             """
 
-            # Try Resend first (if configured)
+            # Send via Resend only. If Resend is not configured, fall back to logging/printing the code.
             if os.environ.get('RESEND_API_KEY'):
                 try:
                     sent = send_email_via_resend(request.email, subject, html_body, text_body, from_email=from_email)
@@ -960,31 +957,12 @@ CovenantAI Team
                         logging.info(f"Verification email sent via Resend to {request.email}")
                     else:
                         logging.error(f"Resend failed to send verification to {request.email}")
+                        logging.info(f"Verification code for {request.email}: {code}")
                 except Exception as e:
                     logging.error(f"Error sending via Resend: {e}")
-                    # fallback to SMTP if available below
-
-            # If Resend is not configured or failed, attempt SMTP if configured
-            if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
-                try:
-                    message = MIMEMultipart("alternative")
-                    message['From'] = from_email
-                    message['To'] = request.email
-                    message['Subject'] = subject
-
-                    message.attach(MIMEText(text_body, "plain"))
-                    message.attach(MIMEText(html_body, "html"))
-
-                    with smtplib.SMTP(smtp_host, smtp_port) as server:
-                        server.starttls()
-                        server.login(smtp_user, smtp_pass)
-                        server.send_message(message)
-
-                    logging.info(f"Verification email sent to {request.email} via SMTP")
-                except Exception as mail_error:
-                    logging.error(f"Failed to send verification email via SMTP: {mail_error}")
+                    logging.info(f"Verification code for {request.email}: {code}")
             else:
-                logging.info(f"Email service not configured; verification code for {request.email}: {code}")
+                logging.info(f"Resend not configured; verification code for {request.email}: {code}")
 
             return {
                 "message": "Verification code sent. Please verify your email before login.",
@@ -1086,7 +1064,7 @@ CovenantAI Team
             </div>
             """
 
-            # Try Resend first
+            # Send via Resend only. If Resend is not configured, log the verification code.
             if os.environ.get('RESEND_API_KEY'):
                 try:
                     sent = send_email_via_resend(user['email'], "Verify Your Email - CovenantAI", html_body, text_body, from_email=from_email)
@@ -1094,30 +1072,12 @@ CovenantAI Team
                         logging.info(f"Verification email re-sent via Resend to {user['email']}")
                     else:
                         logging.error(f"Resend failed to re-send verification to {user['email']}")
+                        logging.info(f"Verification code for {user['email']}: {code}")
                 except Exception as e:
                     logging.error(f"Resend error when re-sending verification: {e}")
-
-            # SMTP fallback
-            if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
-                try:
-                    message = MIMEMultipart("alternative")
-                    message['From'] = from_email
-                    message['To'] = user['email']
-                    message['Subject'] = "Verify Your Email - CovenantAI"
-
-                    message.attach(MIMEText(text_body, "plain"))
-                    message.attach(MIMEText(html_body, "html"))
-
-                    with smtplib.SMTP(smtp_host, smtp_port) as server:
-                        server.starttls()
-                        server.login(smtp_user, smtp_pass)
-                        server.send_message(message)
-
-                    logging.info(f"Verification email re-sent to {user['email']} via SMTP")
-                except Exception as mail_error:
-                    logging.error(f"Failed to re-send verification email via SMTP: {mail_error}")
+                    logging.info(f"Verification code for {user['email']}: {code}")
             else:
-                logging.info(f"Email service not configured; code for {user['email']}: {code}")
+                logging.info(f"Resend not configured; verification code for {user['email']}: {code}")
 
             return {
                 "message": "Email verification required",
@@ -2119,14 +2079,28 @@ async def forgot_password(payload: dict = Body(...)):
     sync_db.users.update_one({'email': email}, {'$set': {'pw_reset_token': token, 'pw_reset_expires': expire}})
     sync_client.close()
 
-    # Log and optionally send email
+    # Log and send via Resend if configured, otherwise log the token
     logging.info(f"Password reset token for {email}: {token}")
-    # If SMTP configured, attempt sending (best-effort)
     try:
-        smtp_host = os.environ.get('SMTP_HOST')
-        if smtp_host:
-            # Implement sending via smtplib or external service (omitted here)
-            logging.info('Would send password reset email (SMTP configured)')
+        from_email = os.environ.get('SMTP_FROM', 'CovenantAI <no-reply@waterbears.in>')
+        if os.environ.get('RESEND_API_KEY'):
+            subject = 'Password reset instructions'
+            body = f"""
+            Hello,
+
+            Use this token to reset your password: {token}
+
+            This token expires in 1 hour.
+
+            If you did not request this, ignore this email.
+            """
+            sent = send_email_via_resend(email, subject, body, body, from_email=from_email)
+            if sent:
+                logging.info(f"Password reset email sent via Resend to {email}")
+            else:
+                logging.error(f"Resend failed to send password reset to {email}")
+        else:
+            logging.info('Resend not configured; password reset token logged only')
     except Exception as e:
         logging.warning('Failed to send password reset email: %s', e)
 
@@ -2243,7 +2217,7 @@ async def send_verification(payload: dict = Body(...)):
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
         smtp_user = os.environ.get('SMTP_USER')
         smtp_pass = os.environ.get('SMTP_PASS')
-    from_email = os.environ.get('SMTP_FROM', smtp_user or 'no-reply@waterbears.in')
+        from_email = os.environ.get('SMTP_FROM', smtp_user or 'no-reply@waterbears.in')
 
         subject = 'Your Verification Code'
         body = f"""
@@ -2259,7 +2233,7 @@ async def send_verification(payload: dict = Body(...)):
         LegalDocAI Team
         """
 
-        # Try Resend first
+        # Send via Resend only. If Resend is not configured, show the code in logs/console.
         if os.environ.get('RESEND_API_KEY'):
             try:
                 sent = send_email_via_resend(email, subject, body, body, from_email=from_email)
@@ -2267,38 +2241,16 @@ async def send_verification(payload: dict = Body(...)):
                     logging.info(f"Verification email sent via Resend to {email}")
                 else:
                     logging.error(f"Resend failed to send verification to {email}")
+                    print("\n==================================")
+                    print(f"🔑 VERIFICATION CODE for {email}: {code}")
+                    print("==================================\n")
             except Exception as e:
                 logging.error(f"Resend exception sending verification: {e}")
-
-        # SMTP fallback if Resend not configured or if SMTP is preferred
-        if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
-            try:
-                import smtplib
-                from email.mime.text import MIMEText
-                from email.mime.multipart import MIMEMultipart
-
-                message = MIMEMultipart()
-                message['From'] = from_email
-                message['To'] = email
-                message['Subject'] = subject
-                message.attach(MIMEText(body, 'plain'))
-
-                logging.info(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
-                server = smtplib.SMTP(smtp_host, smtp_port)
-                server.set_debuglevel(1)
-                server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.send_message(message)
-                server.quit()
-                logging.info(f"Verification email sent to {email} via SMTP")
-            except Exception as mail_error:
-                logging.error(f"Failed to send verification email via SMTP: {mail_error}")
-                # Still show the code even if email fails
                 print("\n==================================")
                 print(f"🔑 VERIFICATION CODE for {email}: {code}")
                 print("==================================\n")
         else:
-            # Show code when no email provider configured
+            # Show code when Resend is not configured
             print("\n==================================")
             print(f"🔑 VERIFICATION CODE for {email}: {code}")
             print("==================================\n")
