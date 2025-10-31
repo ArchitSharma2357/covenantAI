@@ -352,6 +352,7 @@ railway_url = os.environ.get('RAILWAY_STATIC_URL')  # Railway provides this
 
 # Build list of allowed origins
 allow_origins = []
+frontend_prod_url = "https://covenant.up.railway.app"
 if cors_origins_env:
     # Add configured origins
     allow_origins.extend([o.strip() for o in cors_origins_env.split(',') if o.strip()])
@@ -363,6 +364,7 @@ if railway_url:
         allow_origins.append(f"http://{railway_url[8:]}")
     elif railway_url.startswith('http://'):
         allow_origins.append(f"https://{railway_url[7:]}")
+allow_origins.append(frontend_prod_url)
 
 # Add development origins if not in production
 if os.environ.get('NODE_ENV') != 'production':
