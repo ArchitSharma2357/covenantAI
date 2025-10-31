@@ -131,7 +131,7 @@ def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body
             return False
 
         payload = {
-            "from": from_email or os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>'),
+            "from": from_email or os.environ.get('SMTP_FROM', 'CovenantAI <no-reply@waterbears.in>'),
             "to": [to_email],
             "subject": subject,
             "html": html_body,
@@ -913,7 +913,7 @@ async def login(request: LoginRequest):
             smtp_port = int(os.environ.get('SMTP_PORT', '587'))
             smtp_user = os.environ.get('SMTP_USER')
             smtp_pass = os.environ.get('SMTP_PASS')
-            from_email = os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>')
+            from_email = os.environ.get('SMTP_FROM', 'CovenantAI <no-reply@waterbears.in>')
 
             subject = "Verify Your Email - CovenantAI"
             text_body = f"""Hi there,
@@ -1047,7 +1047,7 @@ CovenantAI Team
             smtp_port = int(os.environ.get('SMTP_PORT', '587'))
             smtp_user = os.environ.get('SMTP_USER')
             smtp_pass = os.environ.get('SMTP_PASS')
-            from_email = os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>')
+            from_email = os.environ.get('SMTP_FROM', 'CovenantAI <no-reply@waterbears.in>')
 
             subject = "Verify Your Email - CovenantAI"
             text_body = f"""Hi {user['email']},
@@ -2243,7 +2243,7 @@ async def send_verification(payload: dict = Body(...)):
         smtp_port = int(os.environ.get('SMTP_PORT', '587'))
         smtp_user = os.environ.get('SMTP_USER')
         smtp_pass = os.environ.get('SMTP_PASS')
-        from_email = os.environ.get('SMTP_FROM', smtp_user)
+    from_email = os.environ.get('SMTP_FROM', smtp_user or 'no-reply@waterbears.in')
 
         subject = 'Your Verification Code'
         body = f"""
