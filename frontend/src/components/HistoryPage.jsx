@@ -54,7 +54,8 @@ const HistoryPage = ({ type = 'user' }) => {
       if (type === 'user') {
         const token = localStorage.getItem('token');
         if (!token) {
-          setHistory([]);
+          // Preserve any existing UI state instead of wiping it immediately — user may be navigating
+          // from a guest flow where local data is present. Only clear when explicitly unauthorized.
           setLoading(false);
           return;
         }
@@ -74,8 +75,15 @@ const HistoryPage = ({ type = 'user' }) => {
             }
             return { ...item, analysis_result };
           });
-          setHistory(parsedHistory);
-          setFullHistory(parsedHistory);
+
+          // If server returned nothing but we already have client-side history, keep it to avoid flicker.
+          if ((!Array.isArray(parsedHistory) || parsedHistory.length === 0) && Array.isArray(fullHistory) && fullHistory.length > 0) {
+            // keep existing fullHistory (no-op)
+            logging && console && console.debug && console.debug('HistoryPage: server returned empty, preserving existing history to avoid flicker');
+          } else {
+            setHistory(parsedHistory);
+            setFullHistory(parsedHistory);
+          }
       } else if (type === 'guest') {
         try {
           const response = await axios.get(`${process.env.REACT_APP_API_URL}/history/guest`);

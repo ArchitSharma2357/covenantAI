@@ -97,13 +97,19 @@ const Header = ({ isAuthenticated, user, onLogout }) => {
         <button
           className="p-2 hover:bg-muted/80 rounded-xl transition-all duration-200 hover:scale-105 relative mr-2"
           onClick={() => {
-            // dispatch a single unified event; keep older events for compatibility
-            if (isAuthenticated) {
+            // Robust toggle: update localStorage immediately and emit legacy events for compatibility
+            try {
+              const current = localStorage.getItem('theme') || 'light';
+              const next = current === 'dark' ? 'light' : 'dark';
+              localStorage.setItem('theme', next);
+              // Emit unified and legacy events so both App and other components react
+              window.dispatchEvent(new CustomEvent('themeChanged', { detail: next }));
+              window.dispatchEvent(new CustomEvent('themeToggle'));
               window.dispatchEvent(new CustomEvent('toggleTheme'));
-              window.dispatchEvent(new CustomEvent('themeToggle'));
-            } else {
+              // Also emit guest-specific event for backward compatibility
               window.dispatchEvent(new CustomEvent('guestToggleTheme'));
-              window.dispatchEvent(new CustomEvent('themeToggle'));
+            } catch (e) {
+              console.warn('Theme toggle failed', e);
             }
           }}
           title="Toggle theme"
@@ -193,11 +199,16 @@ const Header = ({ isAuthenticated, user, onLogout }) => {
                     {/* Manage Subscription removed per UX request */}
                     <li>
                       <button className="flex items-center gap-3 w-full px-4 py-2 hover:bg-muted/60 text-sm" onClick={() => {
-                        if (isAuthenticated) {
-                          window.dispatchEvent(new CustomEvent('toggleTheme'))
-                        } else {
-                          // allow guests to toggle theme locally
-                          window.dispatchEvent(new CustomEvent('guestToggleTheme'))
+                        try {
+                          const current = localStorage.getItem('theme') || 'light';
+                          const next = current === 'dark' ? 'light' : 'dark';
+                          localStorage.setItem('theme', next);
+                          window.dispatchEvent(new CustomEvent('themeChanged', { detail: next }));
+                          window.dispatchEvent(new CustomEvent('themeToggle'));
+                          window.dispatchEvent(new CustomEvent('toggleTheme'));
+                          window.dispatchEvent(new CustomEvent('guestToggleTheme'));
+                        } catch (e) {
+                          console.warn('Theme toggle (settings) failed', e);
                         }
                       }}>
                         {theme === 'dark' ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />} {theme === 'dark' ? 'Light Theme' : 'Dark Theme'}
