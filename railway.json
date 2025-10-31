@@ -1,11 +1,27 @@
 {
+  "$schema": "https://railway.app/railway.schema.json",
   "services": [
     {
-      "name": "legal-ai",
-      "buildCommand": "cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt",
+      "name": "frontend",
+      "buildCommand": "cd frontend && npm install && npm run build",
+      "startCommand": "cd frontend && npx serve -s build -l $PORT",
+      "healthcheckPath": "/",
+      "healthcheckTimeout": 100,
+      "envs": {
+        "NODE_ENV": "production",
+        "REACT_APP_API_URL": "${RAILWAY_STATIC_URL}/api"
+      }
+    },
+    {
+      "name": "backend",
+      "buildCommand": "cd backend && pip install -r requirements.txt",
       "startCommand": "cd backend && uvicorn server:app --host 0.0.0.0 --port $PORT",
-      "healthcheckPath": "/api",
-      "healthcheckTimeout": 100
+      "healthcheckPath": "/api/health",
+      "healthcheckTimeout": 100,
+      "envs": {
+        "PYTHON_VERSION": "3.11.8",
+        "PYTHONPATH": "/app/backend"
+      }
     }
   ]
 }

@@ -137,17 +137,37 @@ Railway can deploy your entire Legal Document Analyzer application from a single
 
 ### Railway-Specific Configuration
 
-If Railway doesn't auto-detect correctly, you can add a `railway.json` file to your project root:
+Each service has its own configuration file in its respective directory:
 
-```json
-{
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "uvicorn backend.server:app --host 0.0.0.0 --port $PORT"
-  }
-}
+**Frontend (frontend/railway.toml)**:
+```toml
+[build]
+builder = "nixpacks"
+buildCommand = "npm install && npm run build"
+
+[deploy]
+startCommand = "npx serve -s build -l $PORT"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[env]
+NODE_ENV = "production"
+```
+
+**Backend (backend/railway.toml)**:
+```toml
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
+
+[deploy]
+startCommand = "uvicorn server:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[env]
+PYTHON_VERSION = "3.11.8"
+PYTHONPATH = "/app/backend"
 ```
 
 ### Railway Free Tier Limits

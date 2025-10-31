@@ -3,6 +3,7 @@
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 starlette==0.27.0
+aiofiles==23.2.1
 
 # Environment and Configuration
 python-dotenv==1.0.0
@@ -31,19 +32,15 @@ bcrypt==4.1.1
 # Text-to-Speech
 gTTS==2.4.0
 
-# Utilities
-python-multipart==0.0.6
-
-# Optional / OCR and document helpers (used by server.py fallbacks)
-# Note: these Python packages are wrappers; OCR requires system binaries (tesseract) and
-# PDF->image conversion requires poppler-utils (system package). Install those in the
-# runtime image if you intend to use OCR features.
+# PDF and Document Processing
 pdfminer.six>=20221105
 python-docx>=0.8.11
 Pillow>=9.0.0
 pdf2image>=1.16.0
+
+# Optional: OCR Support (requires system tesseract)
 pytesseract>=0.3.10
 
-# Optional: External integrations (if available)
---extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
-emergentintegrations
+# Utilities
+black==23.10.1
+isort==5.12.0
