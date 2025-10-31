@@ -9,18 +9,11 @@ import io
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import pymongo
+from pymongo import MongoClient
 import os
 import logging
-
-
-import os
-import json
-import logging
-import pymongo
 from datetime import datetime, timedelta
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException
 
 from fastapi import APIRouter, HTTPException
 import pymongo
