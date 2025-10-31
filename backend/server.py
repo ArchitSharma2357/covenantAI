@@ -118,6 +118,42 @@ def strip_markdown(text: str) -> str:
     except Exception:
         return text
 
+
+def send_email_via_resend(to_email: str, subject: str, html_body: str, text_body: str, from_email: str = None) -> bool:
+    """Send an email using Resend (https://resend.com/) REST API.
+
+    Requires environment variable RESEND_API_KEY. Returns True on success, False otherwise.
+    """
+    try:
+        api_key = os.environ.get('RESEND_API_KEY')
+        if not api_key:
+            logging.debug("RESEND_API_KEY not set, cannot send via Resend")
+            return False
+
+        payload = {
+            "from": from_email or os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>'),
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+            "text": text_body
+        }
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        resp = requests.post("https://api.resend.com/emails", json=payload, headers=headers, timeout=15)
+        if resp.status_code in (200, 202):
+            logging.info(f"Resend: email sent to {to_email}, status={resp.status_code}")
+            return True
+        else:
+            logging.error(f"Resend email failed: status={resp.status_code} body={resp.text}")
+            return False
+    except Exception as e:
+        logging.error(f"Resend email exception: {e}")
+        return False
+
 # Authentication imports
 from passlib.context import CryptContext
 from datetime import timedelta
@@ -836,6 +872,7 @@ async def root():
 async def login(request: LoginRequest):
     """Login or auto-register user and send verification if needed"""
     try:
+        sync_client = None
         import smtplib
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
@@ -878,14 +915,8 @@ async def login(request: LoginRequest):
             smtp_pass = os.environ.get('SMTP_PASS')
             from_email = os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>')
 
-            if smtp_host and smtp_user and smtp_pass:
-                try:
-                    message = MIMEMultipart("alternative")
-                    message['From'] = from_email
-                    message['To'] = request.email
-                    message['Subject'] = "Verify Your Email - CovenantAI"
-
-                    text_body = f"""Hi there,
+            subject = "Verify Your Email - CovenantAI"
+            text_body = f"""Hi there,
 
 Please verify your email using this code: {code}
 
@@ -895,31 +926,51 @@ Best,
 CovenantAI Team
 """
 
-                    html_body = f"""
-                    <div style="font-family: 'Segoe UI', sans-serif; background-color: #f4f4f7; padding: 20px;">
-                        <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 10px;
-                                    box-shadow: 0 3px 8px rgba(0,0,0,0.05); overflow: hidden;">
-                            <div style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 18px; text-align: center;">
-                                <h2 style="margin: 0;">Verify Your Email</h2>
-                            </div>
-                            <div style="padding: 25px; color: #333;">
-                                <p>Hi <strong>{request.email}</strong>,</p>
-                                <p>Thanks for joining <b>CovenantAI</b>! Please verify your email using the code below:</p>
-                                <div style="text-align: center; margin: 30px 0;">
-                                    <div style="display: inline-block; background: #2563eb; color: white; 
-                                                font-size: 20px; letter-spacing: 3px; padding: 12px 24px; 
-                                                border-radius: 6px;">
-                                        {code}
-                                    </div>
-                                </div>
-                                <p>This code will expire in <b>15 minutes</b>.</p>
-                                <p>If you didn’t create an account, ignore this email.</p>
-                                <hr style="border:none; border-top:1px solid #eee; margin: 25px 0;">
-                                <p style="font-size: 13px; color: #777;">© {datetime.utcnow().year} CovenantAI. All rights reserved.</p>
+            html_body = f"""
+            <div style="font-family: 'Segoe UI', sans-serif; background-color: #f4f4f7; padding: 20px;">
+                <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 10px;
+                            box-shadow: 0 3px 8px rgba(0,0,0,0.05); overflow: hidden;">
+                    <div style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 18px; text-align: center;">
+                        <h2 style="margin: 0;">Verify Your Email</h2>
+                    </div>
+                    <div style="padding: 25px; color: #333;">
+                        <p>Hi <strong>{request.email}</strong>,</p>
+                        <p>Thanks for joining <b>CovenantAI</b>! Please verify your email using the code below:</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <div style="display: inline-block; background: #2563eb; color: white; 
+                                        font-size: 20px; letter-spacing: 3px; padding: 12px 24px; 
+                                        border-radius: 6px;">
+                                {code}
                             </div>
                         </div>
+                        <p>This code will expire in <b>15 minutes</b>.</p>
+                        <p>If you didn’t create an account, ignore this email.</p>
+                        <hr style="border:none; border-top:1px solid #eee; margin: 25px 0;">
+                        <p style="font-size: 13px; color: #777;">© {datetime.utcnow().year} CovenantAI. All rights reserved.</p>
                     </div>
-                    """
+                </div>
+            </div>
+            """
+
+            # Try Resend first (if configured)
+            if os.environ.get('RESEND_API_KEY'):
+                try:
+                    sent = send_email_via_resend(request.email, subject, html_body, text_body, from_email=from_email)
+                    if sent:
+                        logging.info(f"Verification email sent via Resend to {request.email}")
+                    else:
+                        logging.error(f"Resend failed to send verification to {request.email}")
+                except Exception as e:
+                    logging.error(f"Error sending via Resend: {e}")
+                    # fallback to SMTP if available below
+
+            # If Resend is not configured or failed, attempt SMTP if configured
+            if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
+                try:
+                    message = MIMEMultipart("alternative")
+                    message['From'] = from_email
+                    message['To'] = request.email
+                    message['Subject'] = subject
 
                     message.attach(MIMEText(text_body, "plain"))
                     message.attach(MIMEText(html_body, "html"))
@@ -929,11 +980,11 @@ CovenantAI Team
                         server.login(smtp_user, smtp_pass)
                         server.send_message(message)
 
-                    logging.info(f"Verification email sent to {request.email}")
+                    logging.info(f"Verification email sent to {request.email} via SMTP")
                 except Exception as mail_error:
-                    logging.error(f"Failed to send verification email: {mail_error}")
+                    logging.error(f"Failed to send verification email via SMTP: {mail_error}")
             else:
-                logging.info(f"SMTP not configured, verification code for {request.email}: {code}")
+                logging.info(f"Email service not configured; verification code for {request.email}: {code}")
 
             return {
                 "message": "Verification code sent. Please verify your email before login.",
@@ -998,14 +1049,8 @@ CovenantAI Team
             smtp_pass = os.environ.get('SMTP_PASS')
             from_email = os.environ.get('SMTP_FROM', 'CovenantAI <noreply@legaldocai.com>')
 
-            if smtp_host and smtp_user and smtp_pass:
-                try:
-                    message = MIMEMultipart("alternative")
-                    message['From'] = from_email
-                    message['To'] = user['email']
-                    message['Subject'] = "Verify Your Email - CovenantAI"
-
-                    text_body = f"""Hi {user['email']},
+            subject = "Verify Your Email - CovenantAI"
+            text_body = f"""Hi {user['email']},
 
 Please verify your email using this code: {code}
 
@@ -1015,31 +1060,50 @@ Best,
 CovenantAI Team
 """
 
-                    html_body = f"""
-                    <div style="font-family: 'Segoe UI', sans-serif; background-color: #f4f4f7; padding: 20px;">
-                        <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 10px;
-                                    box-shadow: 0 3px 8px rgba(0,0,0,0.05); overflow: hidden;">
-                            <div style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 18px; text-align: center;">
-                                <h2 style="margin: 0;">Verify Your Email</h2>
-                            </div>
-                            <div style="padding: 25px; color: #333;">
-                                <p>Hi <strong>{user['email']}</strong>,</p>
-                                <p>Use the code below to verify your account:</p>
-                                <div style="text-align: center; margin: 30px 0;">
-                                    <div style="display: inline-block; background: #2563eb; color: white; 
-                                                font-size: 20px; letter-spacing: 3px; padding: 12px 24px; 
-                                                border-radius: 6px;">
-                                        {code}
-                                    </div>
-                                </div>
-                                <p>This code will expire in <b>15 minutes</b>.</p>
-                                <p>If you didn’t request this, ignore this email.</p>
-                                <hr style="border:none; border-top:1px solid #eee; margin: 25px 0;">
-                                <p style="font-size: 13px; color: #777;">© {datetime.utcnow().year} CovenantAI. All rights reserved.</p>
+            html_body = f"""
+            <div style="font-family: 'Segoe UI', sans-serif; background-color: #f4f4f7; padding: 20px;">
+                <div style="max-width: 600px; margin: auto; background: #fff; border-radius: 10px;
+                            box-shadow: 0 3px 8px rgba(0,0,0,0.05); overflow: hidden;">
+                    <div style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 18px; text-align: center;">
+                        <h2 style="margin: 0;">Verify Your Email</h2>
+                    </div>
+                    <div style="padding: 25px; color: #333;">
+                        <p>Hi <strong>{user['email']}</strong>,</p>
+                        <p>Use the code below to verify your account:</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <div style="display: inline-block; background: #2563eb; color: white; 
+                                        font-size: 20px; letter-spacing: 3px; padding: 12px 24px; 
+                                        border-radius: 6px;">
+                                {code}
                             </div>
                         </div>
+                        <p>This code will expire in <b>15 minutes</b>.</p>
+                        <p>If you didn’t request this, ignore this email.</p>
+                        <hr style="border:none; border-top:1px solid #eee; margin: 25px 0;">
+                        <p style="font-size: 13px; color: #777;">© {datetime.utcnow().year} CovenantAI. All rights reserved.</p>
                     </div>
-                    """
+                </div>
+            </div>
+            """
+
+            # Try Resend first
+            if os.environ.get('RESEND_API_KEY'):
+                try:
+                    sent = send_email_via_resend(user['email'], "Verify Your Email - CovenantAI", html_body, text_body, from_email=from_email)
+                    if sent:
+                        logging.info(f"Verification email re-sent via Resend to {user['email']}")
+                    else:
+                        logging.error(f"Resend failed to re-send verification to {user['email']}")
+                except Exception as e:
+                    logging.error(f"Resend error when re-sending verification: {e}")
+
+            # SMTP fallback
+            if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
+                try:
+                    message = MIMEMultipart("alternative")
+                    message['From'] = from_email
+                    message['To'] = user['email']
+                    message['Subject'] = "Verify Your Email - CovenantAI"
 
                     message.attach(MIMEText(text_body, "plain"))
                     message.attach(MIMEText(html_body, "html"))
@@ -1049,11 +1113,11 @@ CovenantAI Team
                         server.login(smtp_user, smtp_pass)
                         server.send_message(message)
 
-                    logging.info(f"Verification email re-sent to {user['email']}")
+                    logging.info(f"Verification email re-sent to {user['email']} via SMTP")
                 except Exception as mail_error:
-                    logging.error(f"Failed to re-send verification email: {mail_error}")
+                    logging.error(f"Failed to re-send verification email via SMTP: {mail_error}")
             else:
-                logging.info(f"SMTP not configured, code for {user['email']}: {code}")
+                logging.info(f"Email service not configured; code for {user['email']}: {code}")
 
             return {
                 "message": "Email verification required",
@@ -2181,7 +2245,33 @@ async def send_verification(payload: dict = Body(...)):
         smtp_pass = os.environ.get('SMTP_PASS')
         from_email = os.environ.get('SMTP_FROM', smtp_user)
 
-        if smtp_host and smtp_user and smtp_pass:
+        subject = 'Your Verification Code'
+        body = f"""
+        Hello,
+
+        Your verification code is: {code}
+
+        This code will expire in 15 minutes.
+
+        If you did not request this code, please ignore this email.
+
+        Best regards,
+        LegalDocAI Team
+        """
+
+        # Try Resend first
+        if os.environ.get('RESEND_API_KEY'):
+            try:
+                sent = send_email_via_resend(email, subject, body, body, from_email=from_email)
+                if sent:
+                    logging.info(f"Verification email sent via Resend to {email}")
+                else:
+                    logging.error(f"Resend failed to send verification to {email}")
+            except Exception as e:
+                logging.error(f"Resend exception sending verification: {e}")
+
+        # SMTP fallback if Resend not configured or if SMTP is preferred
+        if (not os.environ.get('RESEND_API_KEY')) and smtp_host and smtp_user and smtp_pass or (smtp_host and smtp_user and smtp_pass):
             try:
                 import smtplib
                 from email.mime.text import MIMEText
@@ -2190,49 +2280,25 @@ async def send_verification(payload: dict = Body(...)):
                 message = MIMEMultipart()
                 message['From'] = from_email
                 message['To'] = email
-                message['Subject'] = 'Your Verification Code'
-
-                body = f"""
-                Hello,
-
-                Your verification code is: {code}
-
-                This code will expire in 15 minutes.
-
-                If you did not request this code, please ignore this email.
-
-                Best regards,
-                LegalDocAI Team
-                """
-
+                message['Subject'] = subject
                 message.attach(MIMEText(body, 'plain'))
 
                 logging.info(f"Connecting to SMTP server: {smtp_host}:{smtp_port}")
                 server = smtplib.SMTP(smtp_host, smtp_port)
-                server.set_debuglevel(1)  # Enable SMTP debug logging
-                logging.info("Enabling TLS")
+                server.set_debuglevel(1)
                 server.starttls()
-                logging.info("Attempting SMTP login")
                 server.login(smtp_user, smtp_pass)
-                logging.info("Sending message")
                 server.send_message(message)
-                logging.info("Message sent successfully")
                 server.quit()
-                logging.info("SMTP connection closed")
-
-                logging.info(f"Verification email sent to {email}")
-                # Always show the code in logs for development
-                print("\n==================================")
-                print(f"🔑 VERIFICATION CODE for {email}: {code}")
-                print("==================================\n")
+                logging.info(f"Verification email sent to {email} via SMTP")
             except Exception as mail_error:
-                logging.error(f"Failed to send verification email: {mail_error}")
+                logging.error(f"Failed to send verification email via SMTP: {mail_error}")
                 # Still show the code even if email fails
                 print("\n==================================")
                 print(f"🔑 VERIFICATION CODE for {email}: {code}")
                 print("==================================\n")
         else:
-            # Show code when SMTP is not configured
+            # Show code when no email provider configured
             print("\n==================================")
             print(f"🔑 VERIFICATION CODE for {email}: {code}")
             print("==================================\n")
@@ -3960,8 +4026,17 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    if client:
-        client.close()
+    # Close any global MongoDB clients if present
+    try:
+        if MongoDBState.sync_client:
+            MongoDBState.sync_client.close()
+    except Exception:
+        pass
+    try:
+        if MongoDBState.async_client:
+            MongoDBState.async_client.close()
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     import uvicorn, os
