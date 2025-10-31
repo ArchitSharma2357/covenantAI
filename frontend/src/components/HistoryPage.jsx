@@ -59,7 +59,7 @@ const HistoryPage = ({ type = 'user' }) => {
           return;
         }
 
-          const response = await axios.get('http://localhost:8000/api/history', {
+          const response = await axios.get(`${process.env.REACT_APP_API_URL}/history`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           // Defensive: ensure analysis_result is parsed if string
@@ -78,7 +78,7 @@ const HistoryPage = ({ type = 'user' }) => {
           setFullHistory(parsedHistory);
       } else if (type === 'guest') {
         try {
-          const response = await axios.get('http://localhost:8000/api/history/guest');
+          const response = await axios.get(`${process.env.REACT_APP_API_URL}/history/guest`);
           if (Array.isArray(response.data) && response.data.length > 0) {
             // Filter out expired entries
             const now = new Date().getTime();
@@ -194,7 +194,7 @@ const HistoryPage = ({ type = 'user' }) => {
       // 1) Try bundled export (ZIP containing PDF + full AI text)
       if (analysis && analysis.raw_text && analysis.raw_text.length > 0) {
         try {
-          const bundleResp = await axios.post('http://localhost:8000/api/export/pdf?bundle=true', analysis, {
+          const bundleResp = await axios.post(`${process.env.REACT_APP_API_URL}/export/pdf?bundle=true`, analysis, {
             responseType: 'blob',
             headers: isGuest ? {} : { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
@@ -214,7 +214,7 @@ const HistoryPage = ({ type = 'user' }) => {
       // 2) Try PDF-from-analysis (POST)
       if (analysis && Object.keys(analysis).length > 0) {
         try {
-          const pdfResp = await axios.post('http://localhost:8000/api/export/pdf', analysis, {
+          const pdfResp = await axios.post(`${process.env.REACT_APP_API_URL}/export/pdf`, analysis, {
             responseType: 'blob',
             headers: isGuest ? {} : { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
