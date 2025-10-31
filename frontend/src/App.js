@@ -16,6 +16,7 @@ import AnalyticsPage from './components/AnalyticsPage';
 import ComparePage from './components/ComparePage';
 import ProfilePage from './components/ProfilePage';
 import './App.css';
+import './globals.css';
 import { Plus } from 'lucide-react';
 
 function AppContent() {

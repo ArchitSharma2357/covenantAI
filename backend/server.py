@@ -177,83 +177,125 @@ def get_mongo_client():
         logging.error(f"MongoDB error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# MongoDB connection with enhanced error handling and auto-reconnect
-def init_mongodb():
+# MongoDB connection state
+class MongoDBState:
+    async_client = None
+    async_db = None
+    sync_client = None
+    sync_db = None
+
+    @classmethod
+    async def initialize(cls):
+        try:
+            mongo_url = os.environ.get('MONGO_URL')
+            if not mongo_url:
+                logging.warning("MONGO_URL not set - defaulting to localhost")
+                mongo_url = 'mongodb://localhost:27017'
+            
+            # Configure MongoDB clients with optimized settings
+            client_settings = {
+                'serverSelectionTimeoutMS': 5000,
+                'heartbeatFrequencyMS': 30000,
+                'retryWrites': True,
+                'connectTimeoutMS': 30000,
+                'socketTimeoutMS': 30000,
+                'maxIdleTimeMS': 60000,
+                'maxPoolSize': 10,
+                'retryReads': True,
+                'w': 'majority',
+                'journal': True,
+                'appname': 'CovenantAI'
+            }
+            
+            # Initialize async client
+            cls.async_client = AsyncIOMotorClient(mongo_url, **client_settings)
+            
+            # Initialize sync client with same settings
+            cls.sync_client = MongoClient(mongo_url, **client_settings)
+            
+            db_name = os.environ.get('DB_NAME', 'legal_docs')
+            cls.async_db = cls.async_client[db_name]
+            cls.sync_db = cls.sync_client[db_name]
+            
+            # Test connection
+            await cls.async_client.admin.command('ping')
+            cls.sync_client.admin.command('ping')
+            logging.info(f"MongoDB connected successfully to database: {db_name}")
+            
+            # Create indexes
+            await cls.create_indexes()
+            
+        except Exception as e:
+            logging.error(f"MongoDB connection failed: {str(e)}")
+            cls.async_client = None
+            cls.async_db = None
+            cls.sync_client = None
+            cls.sync_db = None
+            raise
+
+    @classmethod
+    async def create_indexes(cls):
+        if cls.async_db is not None:
+            try:
+                await cls.async_db.documents.create_index([("user_id", 1)])
+                await cls.async_db.documents.create_index([("upload_date", -1)])
+                await cls.async_db.chat_messages.create_index([("user_id", 1)])
+                await cls.async_db.chat_messages.create_index([("timestamp", -1)])
+                await cls.async_db.users.create_index([("email", 1)], unique=True)
+                logging.info("MongoDB indexes created successfully")
+            except Exception as e:
+                logging.error(f"Failed to create MongoDB indexes: {str(e)}")
+
+    @classmethod
+    async def check_connection(cls):
+        while True:
+            try:
+                if cls.async_client is None or cls.async_db is None or cls.sync_client is None or cls.sync_db is None:
+                    logging.warning("Attempting to reconnect to MongoDB...")
+                    await cls.initialize()
+                else:
+                    # Test both connections
+                    await cls.async_client.admin.command('ping')
+                    cls.sync_client.admin.command('ping')
+                await asyncio.sleep(30)
+            except Exception as e:
+                logging.error(f"MongoDB connection check failed: {str(e)}")
+                await asyncio.sleep(5)
+
+    @classmethod
+    def cleanup(cls):
+        """Clean up MongoDB connections on shutdown"""
+        if cls.async_client:
+            cls.async_client.close()
+        if cls.sync_client:
+            cls.sync_client.close()
+
+# Initialize MongoDB on startup
+@app.on_event("startup")
+async def startup_mongodb():
     try:
-        mongo_url = os.environ.get('MONGO_URL')
-        if not mongo_url:
-            logging.warning("MONGO_URL not set - defaulting to localhost")
-            mongo_url = 'mongodb://localhost:27017'
-        
-        # Configure MongoDB client with optimized settings
-        client = AsyncIOMotorClient(
-            mongo_url, 
-            serverSelectionTimeoutMS=5000,
-            heartbeatFrequencyMS=30000,
-            retryWrites=True,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000,
-            maxIdleTimeMS=60000,
-            maxPoolSize=10,
-            retryReads=True,
-            w='majority',  # Write concern for better consistency
-            journal=True,  # Wait for journal commit
-            appname='CovenantAI'  # Identify app in MongoDB logs
-        )
-        
-        db = client[os.environ.get('DB_NAME', 'legal_docs')]
-        db_name = os.environ.get('DB_NAME', 'legal_docs')
-        logging.info(f"MongoDB client initialized for database: {db_name}")
-        
-        return client, db
-        
+        await MongoDBState.initialize()
+        # Start connection monitoring in background
+        asyncio.create_task(MongoDBState.check_connection())
     except Exception as e:
-        logging.error(f"MongoDB connection failed: {str(e)}")
-        raise
+        logging.error(f"Failed to initialize MongoDB: {str(e)}")
 
-try:
-    # Initialize MongoDB connection
-    client, db = init_mongodb()
-except Exception as e:
-    logging.error(f"Failed to initialize MongoDB: {str(e)}")
-    logging.error("Application will continue but database operations will fail")
-    client = None
-    db = None
+# Add cleanup on shutdown
+@app.on_event("shutdown")
+async def shutdown_mongodb():
+    MongoDBState.cleanup()
 
-# Add startup event to create indexes
-@app.on_event("startup")
-async def create_indexes():
-    if db is not None:
-        try:
-            await db.documents.create_index([("user_id", 1)])
-            await db.documents.create_index([("upload_date", -1)])
-            await db.chat_messages.create_index([("user_id", 1)])
-            await db.chat_messages.create_index([("timestamp", -1)])
-            await db.users.create_index([("email", 1)], unique=True)
-            logging.info("MongoDB indexes created successfully")
-        except Exception as e:
-            logging.error(f"Failed to create MongoDB indexes: {str(e)}")
-
-# Periodic connection check
-async def check_mongodb_connection():
-    while True:
-        try:
-            if client is None or db is None:
-                logging.warning("Attempting to reconnect to MongoDB...")
-                global client, db
-                client, db = init_mongodb()
-                await create_indexes()
-            else:
-                await client.admin.command('ping')
-            await asyncio.sleep(30)  # Check every 30 seconds
-        except Exception as e:
-            logging.error(f"MongoDB connection check failed: {str(e)}")
-            await asyncio.sleep(5)  # Wait before retry
-
-# Start connection monitoring
-@app.on_event("startup")
-async def start_mongodb_monitor():
-    asyncio.create_task(check_mongodb_connection())
+# Database access helpers
+def get_db(async_db=True):
+    """Get database handle. Returns async or sync db based on parameter."""
+    if async_db:
+        if MongoDBState.async_db is None:
+            raise HTTPException(status_code=503, detail="Database connection not available")
+        return MongoDBState.async_db
+    else:
+        if MongoDBState.sync_db is None:
+            raise HTTPException(status_code=503, detail="Database connection not available")
+        return MongoDBState.sync_db
 
 # Periodic connection check
 async def check_mongodb_connection():
@@ -799,10 +841,8 @@ async def login(request: LoginRequest):
 
         logging.info(f"Login attempt for email: {request.email}")
 
-        sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
-        sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-
-        user = sync_db.users.find_one({"email": request.email})
+        db = get_db(async_db=False)  # Use synchronous DB
+        user = db.users.find_one({"email": request.email})
         logging.info(f"Found user: {user is not None}")
         if user:
             logging.info(f"User ID: {user.get('id')}")
@@ -826,7 +866,7 @@ async def login(request: LoginRequest):
                 "created_at": datetime.utcnow().isoformat(),
             }
 
-            inserted = sync_db.users.insert_one(new_user)
+            inserted = db.users.insert_one(new_user)
             user_id = str(inserted.inserted_id)
 
             # --- send verification email ---
@@ -893,7 +933,6 @@ CovenantAI Team
             else:
                 logging.info(f"SMTP not configured, verification code for {request.email}: {code}")
 
-            sync_client.close()
             return {
                 "message": "Verification code sent. Please verify your email before login.",
                 "email": request.email,
@@ -942,7 +981,7 @@ CovenantAI Team
             code = user.get('email_verify_code') or secrets.token_hex(3)
             expires = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
 
-            sync_db.users.update_one(
+            db.users.update_one(
                 {"_id": user["_id"]},
                 {"$set": {
                     "email_verify_code": code,
@@ -1014,7 +1053,6 @@ CovenantAI Team
             else:
                 logging.info(f"SMTP not configured, code for {user['email']}: {code}")
 
-            sync_client.close()
             return {
                 "message": "Email verification required",
                 "email": user['email'],
@@ -2212,11 +2250,9 @@ async def verify_email(payload: dict = Body(...)):
     if not email or not code:
         raise HTTPException(status_code=400, detail='Email and code required')
     try:
-        sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
-        sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-        user = sync_db.users.find_one({'email': email})
+        db = get_db(async_db=False)
+        user = db.users.find_one({'email': email})
         if not user:
-            sync_client.close()
             raise HTTPException(status_code=400, detail='Invalid email or code')
         
         # Normalize codes: strip whitespace and convert to lowercase for case-insensitive comparison
@@ -2225,10 +2261,8 @@ async def verify_email(payload: dict = Body(...)):
         
         # Check if code matches and hasn't expired
         if stored_code != input_code or datetime.fromisoformat(user.get('email_verify_expires', '1970-01-01T00:00:00')) < datetime.utcnow():
-            sync_client.close()
             raise HTTPException(status_code=400, detail='Invalid or expired code')
-        sync_db.users.update_one({'_id': user['_id']}, {'$set': {'email_verified': True}, '$unset': {'email_verify_code': '', 'email_verify_expires': ''}})
-        sync_client.close()
+        db.users.update_one({'_id': user['_id']}, {'$set': {'email_verified': True}, '$unset': {'email_verify_code': '', 'email_verify_expires': ''}})
         return {'message': 'Email verified'}
     except HTTPException as http_e:
         # Re-raise HTTP exceptions to preserve the status code
