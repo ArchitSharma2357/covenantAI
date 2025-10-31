@@ -1160,22 +1160,39 @@ async def get_history(request: Request):
     try:
         # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
+        logging.info(f"/history called - Authorization header present: {bool(auth_header)}")
         if not auth_header or not auth_header.startswith("Bearer "):
+            logging.warning("/history: missing or invalid Authorization header")
             raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
 
         token = auth_header.replace("Bearer ", "")
         payload = verify_token(token)
+        logging.info(f"/history: token verification payload present: {bool(payload)}")
         if not payload:
+            logging.warning("/history: token verification failed or payload empty")
             raise HTTPException(status_code=401, detail="Invalid token")
 
         user_id = payload.get("user_id")
+        logging.info(f"/history: extracted user_id: {user_id}")
         if not user_id:
+            logging.warning("/history: token payload missing user_id")
             raise HTTPException(status_code=401, detail="Invalid token payload")
 
         # Get user's documents
-        sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
+        mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+        logging.info(f"/history: connecting to MongoDB at: {('****@' + mongo_url.split('@')[-1]) if '@' in mongo_url else mongo_url}")
+        sync_client = pymongo.MongoClient(mongo_url)
         sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-        documents = list(sync_db.documents.find({"user_id": user_id}).sort("created_at", -1))
+        query = {"user_id": user_id}
+        logging.info(f"/history: query={query}")
+        documents = list(sync_db.documents.find(query).sort("created_at", -1))
+        logging.info(f"/history: documents found={len(documents)}")
+        if len(documents) > 0:
+            try:
+                sample_ids = [str(d.get('id') or d.get('_id')) for d in documents[:5]]
+                logging.info(f"/history: sample ids: {sample_ids}")
+            except Exception:
+                logging.debug("/history: could not extract sample ids from documents")
         sync_client.close()
 
         # Format documents for response, robust to missing/legacy fields
@@ -1210,7 +1227,7 @@ async def get_history(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Get history error: {e}")
+        logging.error(f"Get history error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve history")
 
 
@@ -1236,6 +1253,7 @@ async def get_guest_history():
         # --- 1. Connect to MongoDB ---
         mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
         db_name = os.environ.get("DB_NAME", "legal_docs")
+        logging.info(f"/history/guest: connecting to MongoDB at: {('****@' + mongo_url.split('@')[-1]) if '@' in mongo_url else mongo_url}")
         sync_client = pymongo.MongoClient(mongo_url)
         sync_db = sync_client[db_name]
 
@@ -1249,6 +1267,13 @@ async def get_guest_history():
         }).sort("upload_date", -1))  # Sort newest first
 
         # --- 3. Close client ---
+        logging.info(f"/history/guest: documents count={len(documents)}")
+        if len(documents) > 0:
+            try:
+                sample = [str(d.get('id') or d.get('_id')) for d in documents[:5]]
+                logging.info(f"/history/guest: sample ids: {sample}")
+            except Exception:
+                logging.debug("/history/guest: could not extract sample ids")
         sync_client.close()
 
         # --- 4. Format for response ---
@@ -1296,17 +1321,17 @@ async def save_to_history(request: Request, data: dict = Body(...)):
     try:
         logging.info(f"🔵 /history POST endpoint called")
         logging.info(f"   Request data keys: {list(data.keys())}")
-        
         # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
-        logging.info(f"   Authorization header: {auth_header[:20] if auth_header else 'MISSING'}...")
-        
+        logging.info(f"   Authorization header present: {bool(auth_header)}")
+
         if not auth_header or not auth_header.startswith("Bearer "):
             logging.error("Authorization header missing or invalid")
             raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
 
         token = auth_header.replace("Bearer ", "")
         payload = verify_token(token)
+        logging.info(f"   token verification payload present: {bool(payload)}")
         if not payload:
             logging.error("Invalid token")
             raise HTTPException(status_code=401, detail="Invalid token")
