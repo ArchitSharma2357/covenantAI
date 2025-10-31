@@ -72,7 +72,7 @@ function AppContent() {
       try {
         const token = localStorage.getItem('token');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const resp = await axios.get('http://localhost:8000/api/auth/export', { headers, responseType: 'blob' });
+        const resp = await axios.get('https://backendcovenentai.up.railway.app/api/auth/export', { headers, responseType: 'blob' });
         const url = window.URL.createObjectURL(new Blob([resp.data]));
         const link = document.createElement('a');
         link.href = url;
@@ -94,7 +94,7 @@ function AppContent() {
           window.dispatchEvent(new CustomEvent('notifyEvent', { detail: 'You must be logged in to delete account.' }));
           return;
         }
-        await axios.delete('http://localhost:8000/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+        await axios.delete('https://backendcovenentai.up.railway.app/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
         handleLogout();
         window.dispatchEvent(new CustomEvent('notifyEvent', { detail: 'Account deleted' }));
       } catch (err) {
@@ -158,7 +158,7 @@ function AppContent() {
   const checkAuthStatus = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/auth/me', {
+      const response = await axios.get('https://backendcovenentai.up.railway.app/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -213,7 +213,7 @@ function AppContent() {
     try {
       // First upload the document
       console.log('📤 Uploading document...');
-      const uploadResponse = await axios.post('http://localhost:8000/api/documents/upload', formData, {
+      const uploadResponse = await axios.post('https://backendcovenentai.up.railway.app/api/documents/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -225,7 +225,7 @@ function AppContent() {
       console.log('🔍 Analyzing document:', documentId);
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        `http://localhost:8000/api/documents/${documentId}/analyze`,
+        `https://backendcovenentai.up.railway.app/api/documents/${documentId}/analyze`,
         {},
         token ? {
           headers: {
@@ -254,7 +254,7 @@ function AppContent() {
         // Use axios (with defaults already set) to POST to history
         try {
           console.log('💾 About to send POST request to /api/history');
-          const historyRes = await axios.post('http://localhost:8000/api/history', {
+          const historyRes = await axios.post('https://backendcovenentai.up.railway.app/api/history', {
             documentText: documentTextContent,
             analysisResult: response.data,
             filename: selectedFile ? selectedFile.name : 'Pasted Text',
@@ -311,7 +311,7 @@ function AppContent() {
   const handleLogin = async (email, password) => {
     try {
       console.log('🔐 Attempting login for:', email);
-      const response = await axios.post('http://localhost:8000/api/auth/login', {
+      const response = await axios.post('https://backendcovenentai.up.railway.app/api/auth/login', {
         email,
         password,
       });
@@ -341,7 +341,7 @@ function AppContent() {
 
   const handleSignup = async (email, password, name) => {
     try {
-      await axios.post('http://localhost:8000/api/auth/signup', {
+      await axios.post('https://backendcovenentai.up.railway.app/api/auth/signup', {
         email,
         password,
         name,
