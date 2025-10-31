@@ -1,3 +1,20 @@
+
+# ...existing code...
+
+# Place this after api_router is defined and all imports are done
+
+# Placeholder subscription endpoint to prevent 404 errors in frontend
+def add_subscription_endpoint(router):
+    @router.get("/auth/subscription")
+    async def get_subscription(request: Request):
+        """Return dummy subscription status (inactive) for all users."""
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return {"active": False, "plan": None, "expires": None}
+        # In a real implementation, you would look up the user's subscription here
+        return {"active": False, "plan": None, "expires": None}
+
+# ...later, after api_router is defined...
 from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException, Form, Depends, Request, Body
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -403,6 +420,7 @@ app.add_middleware(
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+add_subscription_endpoint(api_router)
 
 # Create uploads directory
 UPLOAD_DIR = ROOT_DIR / "../uploads"
