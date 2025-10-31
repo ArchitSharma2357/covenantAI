@@ -438,7 +438,7 @@ const ChatPage = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">Document:</span>
                     <div>
-                      <button onClick={() => fileInputRef.current?.click()} className="text-sm text-primary hover:underline">Upload</button>
+                      <button onClick={() => fileInputRef.current?.click()} className="text-sm text-primary hover:underline">Upload document</button>
                     </div>
                   </div>
 
