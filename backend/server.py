@@ -29,6 +29,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 import os
 import logging
+import traceback
 from datetime import datetime, timedelta
 from bson import ObjectId
 
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 # Load environment variables first
 load_dotenv(ROOT_DIR / '.env')
 logging.info("Environment variables loaded")
+DEBUG = os.environ.get('DEBUG', 'false').lower() in ('1', 'true', 'yes')
 
 # Log critical configuration
 mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL')
@@ -2468,14 +2470,19 @@ async def upload_document(file: UploadFile = File(...)):
                 return {"document_id": document.id, "filename": document.filename, "status": "uploaded"}
             
             except Exception as e:
-                logging.error(f"Error extracting text or saving to database: {str(e)}")
+                # Log full traceback and return detailed error when DEBUG is enabled
+                logging.exception(f"Error extracting text or saving to database: {e}")
                 # Clean up the file if it was created but there was an error
                 if file_path.exists():
                     try:
                         file_path.unlink()
-                    except:
+                    except Exception:
                         pass
-                raise HTTPException(status_code=500, detail="Document processing failed")
+                if os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes'):
+                    tb = traceback.format_exc()
+                    raise HTTPException(status_code=500, detail=f"Document processing failed: {tb}")
+                else:
+                    raise HTTPException(status_code=500, detail="Document processing failed")
             
         except Exception as e:
             logging.error(f"Error saving file: {str(e)}")
@@ -2490,7 +2497,9 @@ async def upload_document(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Upload error: {str(e)}")
+        logging.exception(f"Upload error: {e}")
+        if os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes'):
+            raise HTTPException(status_code=500, detail=f"File upload failed: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="File upload failed")
 
 # Get all documents
