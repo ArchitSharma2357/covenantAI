@@ -299,14 +299,14 @@ def get_db(async_db=True):
 
 # Periodic connection check
 async def check_mongodb_connection():
+    global client, db
     while True:
         try:
             if client is None or db is None:
                 logging.warning("Attempting to reconnect to MongoDB...")
-                global client, db
-                client, db = await init_mongodb()
+                await MongoDBState.initialize()
             else:
-                await client.admin.command('ping')
+                await MongoDBState.async_client.admin.command('ping')
             await asyncio.sleep(30)  # Check every 30 seconds
         except Exception as e:
             logging.error(f"MongoDB connection check failed: {str(e)}")
