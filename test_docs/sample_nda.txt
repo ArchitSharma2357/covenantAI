@@ -1,0 +1,39 @@
+NON-DISCLOSURE AGREEMENT
+
+This Non-Disclosure Agreement (the "Agreement") is entered into as of October 31, 2025, by and between:
+
+Party A ("Disclosing Party")
+and
+Party B ("Receiving Party")
+
+1. CONFIDENTIAL INFORMATION
+For purposes of this Agreement, "Confidential Information" means any data or information that is proprietary to the Disclosing Party and not generally known to the public, whether in tangible or intangible form, including but not limited to:
+- Trade secrets
+- Technical information
+- Business strategies
+- Customer lists
+- Financial data
+
+2. OBLIGATIONS
+The Receiving Party shall:
+a) Keep all Confidential Information strictly confidential
+b) Not disclose any Confidential Information to any third party
+c) Use Confidential Information only for the purpose of evaluating potential business opportunities
+d) Take reasonable measures to protect the secrecy of the Confidential Information
+
+3. TERM
+This Agreement shall remain in effect for a period of 3 years from the date of execution.
+
+4. RETURN OF MATERIALS
+Upon request by the Disclosing Party, the Receiving Party shall return all materials containing Confidential Information.
+
+5. GOVERNING LAW
+This Agreement shall be governed by the laws of the State of California.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the date first above written.
+
+________________________
+Party A (Disclosing Party)
+
+________________________
+Party B (Receiving Party)

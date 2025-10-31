@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Document Upload and Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .section {
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .output {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="section">
+        <h2>Document Upload & Analysis</h2>
+        <input type="file" id="fileInput">
+        <button onclick="uploadFile()">Upload & Analyze</button>
+        <div id="uploadOutput" class="output"></div>
+    </div>
+
+    <div class="section">
+        <h2>Document Chat</h2>
+        <input type="text" id="docQuestion" placeholder="Ask about the document">
+        <button onclick="askDocumentQuestion()">Ask</button>
+        <div id="docChatOutput" class="output"></div>
+    </div>
+
+    <div class="section">
+        <h2>General Legal Chat</h2>
+        <input type="text" id="generalQuestion" placeholder="Ask a general legal question">
+        <button onclick="askGeneralQuestion()">Ask</button>
+        <div id="generalChatOutput" class="output"></div>
+    </div>
+
+    <script>
+    let currentDocumentId = null;
+    let currentDocumentText = null;
+
+    async function uploadFile() {
+        const file = document.getElementById('fileInput').files[0];
+        if (!file) {
+            alert('Please select a file');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const output = document.getElementById('uploadOutput');
+            output.textContent = 'Uploading...';
+            
+            const uploadResp = await axios.post('https://backendcovenentai.up.railway.app/api/documents/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            const docId = uploadResp.data.document_id || uploadResp.data.id;
+            output.textContent = 'Upload success! Document ID: ' + docId + '\n\nAnalyzing...';
+
+            // Store the document ID and text for later use
+            currentDocumentId = docId;
+            currentDocumentText = uploadResp.data.document_text;
+
+            // Try to analyze it
+            const analyzeResp = await axios.post(`https://backendcovenentai.up.railway.app/api/documents/${docId}/analyze`);
+            
+            output.textContent += '\n\nAnalysis complete!\n\nAnalysis result:\n' + 
+                                JSON.stringify(analyzeResp.data, null, 2);
+        } catch (err) {
+            document.getElementById('uploadOutput').textContent = 'Error: ' + 
+                JSON.stringify(err.response?.data || err.message, null, 2);
+        }
+    }
+
+    async function askDocumentQuestion() {
+        const question = document.getElementById('docQuestion').value;
+        if (!question) {
+            alert('Please enter a question');
+            return;
+        }
+
+        try {
+            const output = document.getElementById('docChatOutput');
+            output.textContent = 'Asking...';
+            
+            const response = await axios.post('https://backendcovenentai.up.railway.app/api/documents/ask/inline', {
+                question: question,
+                document_text: currentDocumentText || `This Non-Disclosure Agreement (the "Agreement") is entered into as of October 31, 2025. The agreement covers confidential information which includes trade secrets, technical information, business strategies, customer lists, and financial data. The receiving party must keep all information strictly confidential for 3 years. The agreement is governed by California law.`,
+                document_id: currentDocumentId
+            });
+
+            output.textContent = 'Question: ' + question + '\n\nAnswer: ' + response.data.answer;
+        } catch (err) {
+            output.textContent = 'Error: ' + JSON.stringify(err.response?.data || err.message, null, 2);
+        }
+    }
+
+    async function askGeneralQuestion() {
+        const question = document.getElementById('generalQuestion').value;
+        if (!question) {
+            alert('Please enter a question');
+            return;
+        }
+
+        try {
+            const output = document.getElementById('generalChatOutput');
+            output.textContent = 'Asking...';
+            
+            const response = await axios.post('https://backendcovenentai.up.railway.app/api/chat', {
+                message: question,
+                mode: 'general'
+            });
+
+            output.textContent = 'Question: ' + question + '\n\nAnswer: ' + response.data.response;
+        } catch (err) {
+            output.textContent = 'Error: ' + JSON.stringify(err.response?.data || err.message, null, 2);
+        }
+    }
+    </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ const ChatPage = () => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ status: '', progress: 0 });
   const [chatMode, setChatMode] = useState('general'); // 'general' or 'document'
   const [documents, setDocuments] = useState([]);
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -237,10 +238,13 @@ const ChatPage = () => {
   const handleUploadAndAsk = async (file) => {
     if (!file) return;
     setLoading(true);
+    setUploadProgress({ status: 'uploading', progress: 0 });
+    
     if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
     loadingTimeoutRef.current = setTimeout(() => {
       if (loading) {
         setLoading(false);
+        setUploadProgress({ status: 'error', progress: 0 });
         setMessages(prev => [...prev, { role: 'assistant', content: 'Processing the uploaded document is taking longer than expected. Please try again in a moment.' }]);
       }
     }, 60000);
@@ -251,22 +255,30 @@ const ChatPage = () => {
       formData.append('file', file);
 
       const uploadResp = await axios.post('https://backendcovenentai.up.railway.app/api/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data', ...(headers || {}) }
+        headers: { 'Content-Type': 'multipart/form-data', ...(headers || {}) },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress({ status: 'uploading', progress });
+        }
       });
 
       // The upload endpoint returns a document identifier; trigger analysis immediately (synchronous) so chat can ask about it now
       const created = uploadResp.data || {};
       const documentId = created.document_id || created.id || created._id || `inline_${Date.now()}`;
 
+      setUploadProgress({ status: 'analyzing', progress: 100 });
+      
       // Try to fetch analysis immediately (analyze endpoint performs extraction and analysis)
       let analysisResult = created.analysis_result || created.analysis || null;
       let documentText = created.text || created.document_text || null;
       try {
         const analyzeResp = await axios.post(`https://backendcovenentai.up.railway.app/api/documents/${documentId}/analyze`);
         analysisResult = analyzeResp.data || analysisResult;
+        setUploadProgress({ status: 'completed', progress: 100 });
       } catch (anErr) {
         // If analysis endpoint fails, continue with whatever data upload returned (likely minimal)
         console.debug('Immediate analyze after upload failed or is pending:', anErr?.message || anErr);
+        setUploadProgress({ status: 'error', progress: 0 });
       }
 
       // Prefer raw text from analysis if available
@@ -311,6 +323,7 @@ const ChatPage = () => {
     } catch (err) {
       console.error('Upload & ask failed', err);
       setMessages(prev => [...prev, { role: 'assistant', content: 'Upload failed. Please try again.' }]);
+      setUploadProgress({ status: 'error', progress: 0 });
     } finally {
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
@@ -433,6 +446,32 @@ const ChatPage = () => {
                     <div className="flex items-center space-x-2 text-muted-foreground">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span className="text-sm">Loading documents...</span>
+                    </div>
+                  ) : uploadProgress.status ? (
+                    <div className="flex items-center space-x-2 text-muted-foreground">
+                      {uploadProgress.status === 'uploading' && (
+                        <>
+                          <div className="w-full h-2 bg-gray-200 rounded">
+                            <div 
+                              className="h-full bg-primary rounded transition-all duration-300" 
+                              style={{width: `${uploadProgress.progress}%`}}
+                            ></div>
+                          </div>
+                          <span className="text-sm">Uploading: {uploadProgress.progress}%</span>
+                        </>
+                      )}
+                      {uploadProgress.status === 'analyzing' && (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                          <span className="text-sm">Analyzing document...</span>
+                        </>
+                      )}
+                      {uploadProgress.status === 'completed' && (
+                        <span className="text-sm text-green-600">Document processed successfully!</span>
+                      )}
+                      {uploadProgress.status === 'error' && (
+                        <span className="text-sm text-red-600">Error processing document. Please try again.</span>
+                      )}
                     </div>
                   ) : documents.length === 0 ? (
                     <div className="flex items-center space-x-3 bg-muted/50 rounded-md px-4 py-2">

@@ -1,0 +1,56 @@
+SERVICE AGREEMENT
+
+This Service Agreement (the "Agreement") is made on October 31, 2025, between:
+
+Service Provider: TechCorp Solutions Inc.
+Client: Client Corp LLC
+
+1. SERVICES
+1.1 The Service Provider agrees to provide the following services:
+    - Software development and maintenance
+    - Technical support
+    - System integration
+    - Training and documentation
+
+2. PAYMENT TERMS
+2.1 The Client agrees to pay:
+    - Base fee: $10,000 per month
+    - Additional services: Billed at $150 per hour
+    - Payment due within 30 days of invoice
+
+3. TERM AND TERMINATION
+3.1 Initial Term: 12 months
+3.2 Either party may terminate with 60 days written notice
+3.3 Early termination fee: 3 months of base fee
+
+4. SERVICE LEVEL AGREEMENT
+4.1 Response Times:
+    - Critical issues: 2 hours
+    - High priority: 4 hours
+    - Normal priority: 24 hours
+4.2 Uptime guarantee: 99.9%
+
+5. LIABILITY AND INDEMNIFICATION
+5.1 Maximum liability: Limited to fees paid in previous 12 months
+5.2 Each party shall indemnify the other against third-party claims
+
+6. INTELLECTUAL PROPERTY
+6.1 All pre-existing IP remains with original owner
+6.2 New IP developed specifically for Client belongs to Client
+
+7. CONFIDENTIALITY
+7.1 Both parties agree to maintain confidentiality of business information
+7.2 Survival: 3 years after termination
+
+8. GOVERNING LAW
+This Agreement shall be governed by the laws of the State of Delaware.
+
+SIGNATURES:
+
+________________________
+TechCorp Solutions Inc.
+
+________________________
+Client Corp LLC
+
+Date: ___________________

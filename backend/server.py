@@ -29,7 +29,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 import os
 import logging
-import traceback
 from datetime import datetime, timedelta
 from bson import ObjectId
 
@@ -50,31 +49,9 @@ ROOT_DIR = Path(__file__).parent
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Reduce noise from very chatty third-party libraries (pdfminer, urllib3, pdf2image, pytesseract)
-# These emit DEBUG logs that can flood deployment logs and hit provider rate limits.
-for noisy in [
-    "pdfminer",
-    "pdfminer.psparser",
-    "pdfminer.pdfinterp",
-    "pdfminer.high_level",
-    "pdfminer.layout",
-    "pdfminer.psparser",
-    "pdfminer.pdfparser",
-    "pdf2image",
-    "PIL",
-    "pytesseract",
-    "urllib3",
-    "httpx",
-]:
-    try:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
-    except Exception:
-        pass
-
 # Load environment variables first
 load_dotenv(ROOT_DIR / '.env')
 logging.info("Environment variables loaded")
-DEBUG = os.environ.get('DEBUG', 'false').lower() in ('1', 'true', 'yes')
 
 # Log critical configuration
 mongo_url = os.environ.get('MONGODB_URL') or os.environ.get('MONGO_URL')
@@ -445,9 +422,9 @@ app.add_middleware(
 api_router = APIRouter(prefix="/api")
 add_subscription_endpoint(api_router)
 
-# Create uploads directory (use an absolute resolved path and ensure parents exist)
-UPLOAD_DIR = (ROOT_DIR / "../uploads").resolve()
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Create uploads directory
+UPLOAD_DIR = ROOT_DIR / "../uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Authentication setup with enhanced security and error handling
 pwd_context = CryptContext(
@@ -2442,20 +2419,7 @@ async def upload_document(file: UploadFile = File(...)):
             logging.info(f"Attempting to save file to: {file_path}")
             with open(file_path, "wb") as buffer:
                 buffer.write(contents)
-                try:
-                    buffer.flush()
-                    os.fsync(buffer.fileno())
-                except Exception:
-                    # fsync may not be available in some environments; ignore if it fails
-                    pass
             logging.info("File saved successfully")
-            # Extra check: ensure the file is visible on disk and list uploads dir for debugging
-            try:
-                exists = file_path.exists()
-                listing = [p.name for p in UPLOAD_DIR.iterdir()][:20]
-                logging.info(f"Post-save exists={exists}; uploads listing(sample 20)={listing}")
-            except Exception as ex:
-                logging.warning(f"Could not stat uploads dir after save: {ex}")
 
             # Extract text content using enhanced extraction system
             try:
@@ -2504,19 +2468,14 @@ async def upload_document(file: UploadFile = File(...)):
                 return {"document_id": document.id, "filename": document.filename, "status": "uploaded"}
             
             except Exception as e:
-                # Log full traceback and return detailed error when DEBUG is enabled
-                logging.exception(f"Error extracting text or saving to database: {e}")
+                logging.error(f"Error extracting text or saving to database: {str(e)}")
                 # Clean up the file if it was created but there was an error
                 if file_path.exists():
                     try:
                         file_path.unlink()
-                    except Exception:
+                    except:
                         pass
-                if os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes'):
-                    tb = traceback.format_exc()
-                    raise HTTPException(status_code=500, detail=f"Document processing failed: {tb}")
-                else:
-                    raise HTTPException(status_code=500, detail="Document processing failed")
+                raise HTTPException(status_code=500, detail="Document processing failed")
             
         except Exception as e:
             logging.error(f"Error saving file: {str(e)}")
@@ -2531,9 +2490,7 @@ async def upload_document(file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logging.exception(f"Upload error: {e}")
-        if os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes'):
-            raise HTTPException(status_code=500, detail=f"File upload failed: {traceback.format_exc()}")
+        logging.error(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail="File upload failed")
 
 # Get all documents
@@ -2704,7 +2661,8 @@ def extract_text_docx(path: str) -> str:
     return ""
 
 @api_router.post("/documents/{document_id}/analyze")
-async def analyze_document(document_id: str, request: Request):
+async def analyze_document(document_id: str, request: Request = None):
+    """Analyze a document with the given ID. The request parameter is optional and only used for auth."""
     sync_client = None
     user_id = None
     all_analyses: List[Dict[str, Any]] = []
