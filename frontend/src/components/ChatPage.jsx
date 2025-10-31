@@ -63,7 +63,7 @@ const ChatPage = () => {
       setLoadingDocuments(true);
       try {
         if (token) {
-          const response = await axios.get('http://localhost:8000/api/documents', {
+          const response = await axios.get('https://backendcovenentai.up.railway.app/api/documents', {
             headers: { Authorization: `Bearer ${token}` }
           });
           setDocuments(response.data || []);
@@ -74,7 +74,7 @@ const ChatPage = () => {
         } else {
           // Try guest-visible documents from history endpoint (only analysis, not uploaded docs)
           try {
-            const resp = await axios.get('http://localhost:8000/api/history/guest');
+            const resp = await axios.get('https://backendcovenentai.up.railway.app/api/history/guest');
             // history returns records; map to a lightweight doc shape
             const docs = (resp.data || []).map(h => ({
               id: h.id || h._id || h.document_id || h.file_id || h.filename || (h.upload_id || ''),
@@ -149,7 +149,7 @@ const ChatPage = () => {
         // For authenticated users with server-stored documents, try server-side ask first
         if (token && selectedDocument.id && !selectedDocument.id.toString().startsWith('inline_')) {
           try {
-            response = await axios.post(`http://localhost:8000/api/documents/ask`, {
+            response = await axios.post(`https://backendcovenentai.up.railway.app/api/documents/ask`, {
               document_id: selectedDocument.id,
               question: inputMessage,
               session_id: `chat_${selectedDocument.id}_${Date.now()}`
@@ -165,7 +165,7 @@ const ChatPage = () => {
             }
           } catch (err) {
             // fallback to inline using provided analysis
-            const respInline = await axios.post('http://localhost:8000/api/documents/ask/inline', {
+            const respInline = await axios.post('https://backendcovenentai.up.railway.app/api/documents/ask/inline', {
               question: inputMessage,
               analysis: selectedDocument.analysis,
               document_id: selectedDocument.id
@@ -187,7 +187,7 @@ const ChatPage = () => {
 
           console.debug('Document text length:', docText.length);
           console.debug('Sending document_id:', selectedDocument.id);
-          const respInline = await axios.post('http://localhost:8000/api/documents/ask/inline', {
+          const respInline = await axios.post('https://backendcovenentai.up.railway.app/api/documents/ask/inline', {
             document_text: docText,
             document_id: selectedDocument.id,
             question: processedQuestion
@@ -202,7 +202,7 @@ const ChatPage = () => {
         }
       } else {
         // Use general chat endpoint
-        response = await axios.post('http://localhost:8000/api/chat', {
+        response = await axios.post('https://backendcovenentai.up.railway.app/api/chat', {
           message: inputMessage,
           context: messages.slice(-5), // Send last 5 messages for context
           mode: chatMode // Send chat mode to backend
@@ -250,7 +250,7 @@ const ChatPage = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadResp = await axios.post('http://localhost:8000/api/documents/upload', formData, {
+      const uploadResp = await axios.post('https://backendcovenentai.up.railway.app/api/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data', ...(headers || {}) }
       });
 
@@ -262,7 +262,7 @@ const ChatPage = () => {
       let analysisResult = created.analysis_result || created.analysis || null;
       let documentText = created.text || created.document_text || null;
       try {
-        const analyzeResp = await axios.post(`http://localhost:8000/api/documents/${documentId}/analyze`);
+        const analyzeResp = await axios.post(`https://backendcovenentai.up.railway.app/api/documents/${documentId}/analyze`);
         analysisResult = analyzeResp.data || analysisResult;
       } catch (anErr) {
         // If analysis endpoint fails, continue with whatever data upload returned (likely minimal)
@@ -288,7 +288,7 @@ const ChatPage = () => {
       // If user has a typed question, run inline ask against the analysis/text
       if (inputMessage && inputMessage.trim()) {
         try {
-          const respInline = await axios.post('http://localhost:8000/api/documents/ask/inline', {
+          const respInline = await axios.post('https://backendcovenentai.up.railway.app/api/documents/ask/inline', {
             question: inputMessage,
             analysis: lightweight.analysis,
             document_text: lightweight.document_text
@@ -331,7 +331,7 @@ const ChatPage = () => {
     try {
       const token = localStorage.getItem('token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      await axios.delete(`http://localhost:8000/api/documents/${docId}`, { headers });
+      await axios.delete(`https://backendcovenentai.up.railway.app/api/documents/${docId}`, { headers });
     } catch (error) {
       console.error('Error deleting document:', error);
       // Continue to remove from local state even if API call fails
