@@ -3668,50 +3668,6 @@ async def export_report_pdf(report_data: dict = Body(...), bundle: Optional[bool
                             pdf.multi_cell(0, 4, txt=f"* {clean_text}")
                     pdf.ln(2)
 
-            # Strengths
-            if analysis.get('strengths'):
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, txt="Strengths", ln=True)
-                pdf.set_font(base_font, size=10)
-                for item in analysis['strengths']:
-                    if isinstance(item, dict) and item.get('text'):
-                        clean_text = clean_text_for_pdf(item['text'])
-                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
-                pdf.ln(2)
-
-            # Weaknesses
-            if analysis.get('weaknesses'):
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, txt="Weaknesses", ln=True)
-                pdf.set_font(base_font, size=10)
-                for item in analysis['weaknesses']:
-                    if isinstance(item, dict) and item.get('text'):
-                        clean_text = clean_text_for_pdf(item['text'])
-                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
-                pdf.ln(2)
-
-            # Opportunities
-            if analysis.get('opportunities'):
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, txt="Opportunities", ln=True)
-                pdf.set_font(base_font, size=10)
-                for item in analysis['opportunities']:
-                    if isinstance(item, dict) and item.get('text'):
-                        clean_text = clean_text_for_pdf(item['text'])
-                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
-                pdf.ln(2)
-
-            # Threats
-            if analysis.get('threats'):
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, txt="Threats", ln=True)
-                pdf.set_font(base_font, size=10)
-                for item in analysis['threats']:
-                    if isinstance(item, dict) and item.get('text'):
-                        clean_text = clean_text_for_pdf(item['text'])
-                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
-                pdf.ln(2)
-
         # Critical Flags
         if report_data.get('criticalFlags') and len(report_data['criticalFlags']) > 0:
             pdf.set_font(base_font, 'B', 12)
