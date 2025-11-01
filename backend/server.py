@@ -825,9 +825,9 @@ async def send_message(prompt: str, mode: str = "general", context: str = "") ->
         """
         # If the prompt looks like a long document, return a short structured analysis
         text = p.strip()
-        if len(text) > 2000 or '\n' in text and len(text) > 400:
+        if len(text) > 2000 or '\n' in text and len(text) > 800:
             # Very short heuristic analysis: executive  + key points
-             = text[:800].strip()
+            summary = text[:800].strip()
             return (
                 "EXECUTIVE : This document appears to be a legal text. "
                 "A quick read indicates the main topics and obligations are: "
