@@ -71,7 +71,7 @@ const UploadBox = ({ onFileSelect, onTextInput }) => {
         >
           <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground mb-2">Choose a file or drag it here</p>
-          <p className="text-sm text-muted-foreground">Supported formats: PDF</p>
+          <p className="text-sm text-muted-foreground">Supported formats: PDF, TXT</p>
           <input
             ref={fileInputRef}
             type="file"
