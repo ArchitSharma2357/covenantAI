@@ -3333,134 +3333,175 @@ async def get_chat_history(document_id: str, session_id: Optional[str] = None):
 
 
 
-# Export selective sections of document analysis as PDF
+# Export document analysis as selective PDF
 @api_router.post("/documents/{document_id}/export-selective-pdf")
 async def export_selective_pdf(document_id: str, request_body: ExportRequest):
-    """Generate a sleek, minimal black-and-white PDF with selected sections."""
-    logging.info(f"Selective PDF export started for document: {document_id}")
-
+    """Export selected sections of document analysis as PDF"""
+    logging.info(f"Starting selective PDF export for document: {document_id}")
     try:
-        sections = request_body.sections or []
+        sections = request_body.sections
         if not sections:
             raise HTTPException(status_code=400, detail="No sections selected for export")
 
-        # --- Fetch document from DB ---
+        # Get document from database
         sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
-        db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-        document = db.documents.find_one({"id": document_id})
-        sync_client.close()
-
+        sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
+        document = sync_db.documents.find_one({"id": document_id})
         if not document:
+            sync_client.close()
             logging.error(f"Document not found: {document_id}")
             raise HTTPException(status_code=404, detail="Document not found")
 
         if document.get('analysis_status') != 'completed':
-            logging.error(f"Document analysis incomplete: {document_id}")
+            sync_client.close()
+            logging.error(f"Document analysis not completed: {document_id}")
             raise HTTPException(status_code=400, detail="Document analysis not completed yet")
 
-        # --- Helper: Clean text for PDF ---
-        def clean_text(text: str) -> str:
+        sync_client.close()
+
+        # Helper function to clean text for PDF
+        def clean_text_for_pdf(text):
+            """Minimal, unicode-preserving cleaning for PDF output.
+
+            Keep Unicode characters (don't filter by byte value). Only remove
+            nulls and normalize common punctuation so the PDF looks consistent.
+            """
             if not text:
                 return ""
-            t = str(text)
-            t = t.replace('\x00', '').replace('•', '*').replace('\u2022', '*')
-            t = t.replace('–', '-').replace('—', '-')
-            t = t.replace('\u2018', "'").replace('\u2019', "'").replace('\u201C', '"').replace('\u201D', '"')
-            return t.strip()
+            text = str(text)
+            # Remove NULs which can break some PDF writers
+            text = text.replace('\x00', '')
+            # Replace bullet points with asterisks
+            text = text.replace('•', '*').replace('\u2022', '*')
+            # Replace en/em dashes with hyphens
+            text = text.replace('–', '-').replace('—', '-')
+            # Normalize smart quotes to ASCII equivalents for consistency
+            text = text.replace('\u2018', "'").replace('\u2019', "'")
+            text = text.replace('\u201C', '"').replace('\u201D', '"')
+            return text
 
-        # --- Setup FPDF ---
+        logging.info(f"Generating selective PDF with sections: {sections}")
         from fpdf import FPDF
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
 
+        pdf = FPDF()
+        # If DejaVu Sans is available on the system, register it for Unicode support
         try:
-            dejavu = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-            if os.path.exists(dejavu):
-                pdf.add_font('DejaVu', '', dejavu, uni=True)
-                pdf.add_font('DejaVu', 'B', dejavu, uni=True)
+            dejavu_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+            if os.path.exists(dejavu_path):
+                pdf.add_font('DejaVu', '', dejavu_path, uni=True)
+                # Register a bold variant (reuse same TTF if a separate bold file isn't available)
+                try:
+                    pdf.add_font('DejaVu', 'B', dejavu_path, uni=True)
+                except Exception:
+                    pass
                 base_font = 'DejaVu'
             else:
                 base_font = 'Arial'
         except Exception:
             base_font = 'Arial'
+        logging.info(f"PDF selective export: selected base_font={base_font}")
 
         pdf.add_page()
         pdf.set_font(base_font, 'B', 16)
-        pdf.cell(0, 10, "Legal Document Analysis Report", ln=True, align='C')
-        pdf.ln(6)
+        pdf.cell(0, 10, txt="Legal Document Analysis Report", ln=True, align='C')
+        pdf.ln(5)
 
         pdf.set_font(base_font, size=11)
-        pdf.cell(0, 8, f"Document: {document.get('filename', 'Unknown')}", ln=True)
-        pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
-        pdf.ln(6)
+        pdf.cell(0, 8, txt=f"Document: {document.get('filename', 'Unknown')}", ln=True)
+        pdf.cell(0, 8, txt=f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.ln(5)
 
-        # --- Section: Summary ---
+        # Add selected sections
         if 'summary' in sections:
-            summary = document.get('executive_summary') or ''
+            executive_summary = document.get('executive_summary') or ''
             plain_english = document.get('plain_english') or ''
-            if summary or plain_english:
+            if executive_summary or plain_english:
                 pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, "Summary", ln=True)
+                pdf.cell(0, 8, txt="Summary", ln=True)
                 pdf.set_font(base_font, size=10)
-                pdf.multi_cell(0, 5, clean_text(summary)[:3000] + ("..." if len(summary) > 3000 else ""))
-                pdf.multi_cell(0, 5, clean_text(plain_english))
-                pdf.ln(4)
-
-        # --- Section: Key Clauses ---
-        if 'keyclauses' in sections:
-            clauses = document.get('key_clauses') or []
-            if clauses:
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, "Key Clauses", ln=True)
-                for clause in clauses:
-                    if clause.get('clause'):
-                        pdf.set_font(base_font, 'B', 10)
-                        pdf.cell(0, 6, f"Clause: {clean_text(clause['clause'][:100])}", ln=True)
-                        if clause.get('explanation'):
-                            pdf.set_font(base_font, size=9)
-                            pdf.multi_cell(0, 4, clean_text(clause['explanation']))
-                        pdf.ln(2)
-
-        # --- Section: Risk Assessment ---
-        if 'risks' in sections:
-            risks = document.get('risk_assessment') or ''
-            if risks:
-                pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, "Risk Assessment", ln=True)
-                pdf.set_font(base_font, size=10)
-                pdf.multi_cell(0, 5, clean_text(risks))
+                
+                if executive_summary:
+                    clean_content = clean_text_for_pdf(executive_summary)
+                    logging.info(f"selective export executive_summary length={len(executive_summary)} cleaned={len(clean_content)}")
+                    if len(clean_content) > 3000:
+                        clean_content = clean_content[:3000] + "...[Content truncated]"
+                    pdf.multi_cell(0, 4, txt=clean_content)
+                
+                if plain_english:
+                    clean_content = clean_text_for_pdf(plain_english)
+                    logging.info(f"selective export plain_english length={len(plain_english)} cleaned={len(clean_content)}")
+                    # Allow the full plain English summary to be written; multi_cell will
+                    # handle paging. Avoid artificial truncation so the exported report
+                    # contains the full analysis.
+                    pdf.multi_cell(0, 4, txt=clean_content)
                 pdf.ln(3)
 
-        # --- Section: Q&A ---
-        if 'qa' in sections:
-            sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
-            qa_list = list(sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-                           .chat_messages.find({"document_id": document_id}).limit(10))
-            sync_client.close()
-
-            if qa_list:
+        if 'keyclauses' in sections:
+            key_clauses = document.get('key_clauses') or []
+            if key_clauses:
                 pdf.set_font(base_font, 'B', 12)
-                pdf.cell(0, 8, "Questions & Answers", ln=True)
+                pdf.cell(0, 8, txt="Key Clauses Analysis", ln=True)
                 pdf.set_font(base_font, size=10)
-                for qa in qa_list:
-                    q = clean_text(qa.get('question', ''))
-                    a = clean_text(qa.get('answer', ''))
+                
+                for clause in key_clauses:
+                    if clause.get('clause'):
+                        clean_clause = clean_text_for_pdf(clause['clause'])
+                        pdf.set_font(base_font, 'B', 10)
+                        pdf.cell(0, 6, txt=f"Clause: {clean_clause[:100]}", ln=True)
+                        
+                        if clause.get('explanation'):
+                            pdf.set_font(base_font, size=9)
+                            clean_explanation = clean_text_for_pdf(clause['explanation'])
+                            pdf.multi_cell(0, 4, txt=clean_explanation)
+                        pdf.ln(2)
+
+        if 'risks' in sections:
+            risk_assessment = document.get('risk_assessment') or ''
+            if risk_assessment:
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Risk Assessment", ln=True)
+                pdf.set_font(base_font, size=10)
+                
+                clean_content = clean_text_for_pdf(risk_assessment)
+                pdf.multi_cell(0, 4, txt=clean_content)
+                pdf.ln(3)
+
+        if 'qa' in sections:
+            # Get Q&A from chat messages
+            sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
+            sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
+            qa_messages = list(sync_db.chat_messages.find({"document_id": document_id}).limit(10))
+            sync_client.close()
+            
+            if qa_messages:
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Questions & Answers", ln=True)
+                pdf.set_font(base_font, size=10)
+                
+                for qa in qa_messages:
+                    clean_q = clean_text_for_pdf(qa.get('question', ''))
                     pdf.set_font(base_font, 'B', 10)
-                    pdf.cell(0, 6, f"Q: {q[:100]}", ln=True)
+                    pdf.cell(0, 6, txt=f"Q: {clean_q[:100]}", ln=True)
+                    
                     pdf.set_font(base_font, size=9)
-                    pdf.multi_cell(0, 4, f"A: {a}")
+                    clean_a = clean_text_for_pdf(qa.get('answer', ''))
+                    pdf.multi_cell(0, 4, txt=f"A: {clean_a}")
                     pdf.ln(2)
 
-        # --- Finalize and return PDF ---
-        tmp_file = tempfile.mktemp(suffix='.pdf')
-        pdf.output(tmp_file)
+        # Save PDF to temporary file
+        logging.info("Saving selective PDF to temporary file")
+        tmp_file_path = tempfile.mktemp(suffix='.pdf')
+        pdf.output(tmp_file_path)
+        
+        logging.info(f"Selective PDF saved successfully to: {tmp_file_path}")
 
+        # Return PDF file
         filename = f"legal_analysis_{document_id}.pdf"
-        logging.info(f"Selective PDF generated: {filename}")
-
+        logging.info(f"Returning selective PDF file: {filename}")
+        
         return FileResponse(
-            tmp_file,
-            media_type="application/pdf",
+            tmp_file_path,
+            media_type='application/pdf',
             filename=filename,
             headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
@@ -3468,214 +3509,314 @@ async def export_selective_pdf(document_id: str, request_body: ExportRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"PDF export failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+        logging.error(f"Selective PDF export error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {str(e)}")
 
-
-
-
-# Export report data as PDF (CovenantAI Style: Black & White, Sleek & Symmetric)
+# Export report data as PDF
 @api_router.post("/export/pdf")
 async def export_report_pdf(report_data: dict = Body(...), bundle: Optional[bool] = False):
-    """Export CovenantAI report as a minimal, symmetric, black-and-white styled PDF"""
-    logging.info("Starting CovenantAI PDF export")
-
+    """Export report data as a downloadable PDF report"""
+    logging.info("Starting PDF export for report data")
     try:
-        # --- Helper: Clean text ---
-        def clean_text_for_pdf(text: str) -> str:
+        # Helper function to clean text for PDF
+        def clean_text_for_pdf(text):
             if not text:
                 return ""
             text = str(text)
-            text = text.replace('\x00', '')
-            text = (
-                text.replace('•', '*')
-                    .replace('–', '-')
-                    .replace('—', '-')
-                    .replace('\u2018', "'")
-                    .replace('\u2019', "'")
-                    .replace('\u201C', '"')
-                    .replace('\u201D', '"')
+            # Remove emojis and special characters
+            emoji_pattern = re.compile(
+                "["
+                "\U0001F600-\U0001F64F"  # emoticons
+                "\U0001F300-\U0001F5FF"  # symbols & pictographs
+                "\U0001F680-\U0001F6FF"  # transport & map symbols
+                "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                "\U00002702-\U000027B0"
+                "\U000024C2-\U0001F251"
+                "\u2022"  # bullet point
+                "\u2013"  # en dash
+                "\u2014"  # em dash
+                "\u2018"  # left single quotation mark
+                "\u2019"  # right single quotation mark
+                "\u201C"  # left double quotation mark
+                "\u201D"  # right double quotation mark
+                "]+", flags=re.UNICODE
             )
-            return text.strip()
+            text = emoji_pattern.sub(r'', text)
+            # Replace problematic characters
+            text = text.replace('\x00', '')
+            # Replace bullet points with asterisks
+            text = text.replace('•', '*')
+            # Replace en/em dashes with hyphens
+            text = text.replace('–', '-')
+            text = text.replace('—', '-')
+            # Replace smart quotes with regular quotes
+            text = text.replace('"', '"')
+            text = text.replace('"', '"')
+            text = text.replace(''', "'")
+            text = text.replace(''', "'")
+            return text
 
+        logging.info("Starting PDF generation with FPDF")
         from fpdf import FPDF
-        import tempfile, json, os, re
-        from datetime import datetime
 
-        # --- Setup PDF ---
-        pdf = FPDF(format='A4')
+        pdf = FPDF()
+        # Register and prefer a Unicode-capable font when available
         try:
             dejavu_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             if os.path.exists(dejavu_path):
                 pdf.add_font('DejaVu', '', dejavu_path, uni=True)
-                pdf.add_font('DejaVu', 'B', dejavu_path, uni=True)
+                try:
+                    pdf.add_font('DejaVu', 'B', dejavu_path, uni=True)
+                except Exception:
+                    pass
                 base_font = 'DejaVu'
             else:
                 base_font = 'Arial'
         except Exception:
             base_font = 'Arial'
-
-        logging.info(f"Selected base_font={base_font}")
+        logging.info(f"PDF export_report_pdf: selected base_font={base_font}")
 
         pdf.add_page()
-        pdf.set_left_margin(15)
-        pdf.set_right_margin(15)
-
-        # --- Header ---
         pdf.set_font(base_font, 'B', 16)
-        pdf.cell(0, 10, "COVENANTAI REPORT", ln=True, align='C')
-        pdf.ln(4)
-        pdf.set_font(base_font, '', 11)
-        pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
-        pdf.ln(10)
+        pdf.cell(0, 10, txt="CovenantAI Analysis Report", ln=True, align='C')
+        pdf.ln(5)
 
-        # --- Helper for section titles ---
-        def section_title(title: str):
-            pdf.set_font(base_font, 'B', 12)
-            pdf.cell(0, 8, txt=title.upper(), ln=True, align='L')
-            pdf.ln(2)
+        pdf.set_font(base_font, size=11)
+        pdf.cell(0, 8, txt=f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.ln(5)
 
-        # --- Document Summary ---
+        # Document Summary
         summary_text = report_data.get('summary')
-        if not summary_text and isinstance(report_data.get('analysis'), dict):
-            summary_text = report_data['analysis'].get('raw_text', '')
+        # If structured analysis is missing but we have raw AI text, use that as summary
+        if not summary_text and report_data.get('analysis') and isinstance(report_data['analysis'], dict):
+            # prefer analysis.raw_text when available
+            summary_text = report_data['analysis'].get('raw_text') or report_data.get('summary')
 
         if summary_text:
-            section_title("Document Summary")
-            pdf.set_font(base_font, '', 10)
-            pdf.multi_cell(0, 5, clean_text_for_pdf(summary_text))
-            pdf.ln(5)
+            pdf.set_font(base_font, 'B', 12)
+            pdf.cell(0, 8, txt="Document Summary", ln=True)
+            pdf.set_font(base_font, size=10)
+            clean_content = clean_text_for_pdf(summary_text)
+            logging.info(f"export_report_pdf summary length={len(summary_text)} cleaned={len(clean_content)}")
+            pdf.multi_cell(0, 4, txt=clean_content)
+            pdf.ln(3)
 
-        # --- Risk Assessment ---
+        # Risk Score
         if report_data.get('riskScore'):
-            section_title("Risk Assessment")
+            pdf.set_font(base_font, 'B', 12)
+            pdf.cell(0, 8, txt="Risk Assessment Score", ln=True)
+            pdf.set_font(base_font, size=10)
             risk = report_data['riskScore']
-            pdf.set_font(base_font, '', 10)
-            pdf.cell(0, 6, f"Score: {risk.get('score', 'N/A')} / {risk.get('max', 'N/A')}", ln=True)
-            pdf.cell(0, 6, f"Level: {risk.get('label', 'N/A')}", ln=True)
-            pdf.ln(5)
+            pdf.cell(0, 6, txt=f"Score: {risk.get('score', 'N/A')}/{risk.get('max', 'N/A')}", ln=True)
+            pdf.cell(0, 6, txt=f"Level: {risk.get('label', 'N/A')}", ln=True)
+            pdf.ln(3)
 
-        # --- SWOT Analysis ---
-        analysis = report_data.get('analysis', {})
-        if isinstance(analysis, dict):
-            mapping = {
-                "strengths": "Strengths",
-                "weaknesses": "Weaknesses",
-                "opportunities": "Opportunities",
-                "threats": "Threats"
-            }
+        # SWOT Analysis
+        if report_data.get('analysis'):
+            analysis = report_data['analysis']
 
-            if not any(k in analysis for k in mapping) and analysis.get('raw_text'):
-                section_title("Analysis")
-                pdf.set_font(base_font, '', 10)
-                pdf.multi_cell(0, 5, clean_text_for_pdf(analysis.get('raw_text', '')))
-                pdf.ln(5)
+            # If analysis is not structured but contains raw_text, print the raw analysis
+            if not any(k in analysis for k in ('strengths', 'weaknesses', 'opportunities', 'threats')) and analysis.get('raw_text'):
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="AI Analysis", ln=True)
+                pdf.set_font(base_font, size=10)
+                clean_raw = clean_text_for_pdf(analysis.get('raw_text', ''))
+                pdf.multi_cell(0, 4, txt=clean_raw)
+                pdf.ln(2)
             else:
-                for key, label in mapping.items():
-                    if analysis.get(key):
-                        section_title(label)
-                        pdf.set_font(base_font, '', 10)
-                        for item in analysis[key]:
-                            if isinstance(item, dict) and item.get('text'):
-                                pdf.multi_cell(0, 5, f"• {clean_text_for_pdf(item['text'])}")
-                        pdf.ln(3)
+                # Strengths
+                if analysis.get('strengths'):
+                    pdf.set_font(base_font, 'B', 12)
+                    pdf.cell(0, 8, txt="Strengths", ln=True)
+                    pdf.set_font(base_font, size=10)
+                    for item in analysis['strengths']:
+                        if isinstance(item, dict) and item.get('text'):
+                            clean_text = clean_text_for_pdf(item['text'])
+                            pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                    pdf.ln(2)
 
-        # --- Critical Red Flags ---
-        if report_data.get('criticalFlags'):
-            section_title("Critical Red Flags")
-            pdf.set_font(base_font, '', 10)
+                # Weaknesses
+                if analysis.get('weaknesses'):
+                    pdf.set_font(base_font, 'B', 12)
+                    pdf.cell(0, 8, txt="Weaknesses", ln=True)
+                    pdf.set_font(base_font, size=10)
+                    for item in analysis['weaknesses']:
+                        if isinstance(item, dict) and item.get('text'):
+                            clean_text = clean_text_for_pdf(item['text'])
+                            pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                    pdf.ln(2)
+
+                # Opportunities
+                if analysis.get('opportunities'):
+                    pdf.set_font(base_font, 'B', 12)
+                    pdf.cell(0, 8, txt="Opportunities", ln=True)
+                    pdf.set_font(base_font, size=10)
+                    for item in analysis['opportunities']:
+                        if isinstance(item, dict) and item.get('text'):
+                            clean_text = clean_text_for_pdf(item['text'])
+                            pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                    pdf.ln(2)
+
+                # Threats
+                if analysis.get('threats'):
+                    pdf.set_font(base_font, 'B', 12)
+                    pdf.cell(0, 8, txt="Threats", ln=True)
+                    pdf.set_font(base_font, size=10)
+                    for item in analysis['threats']:
+                        if isinstance(item, dict) and item.get('text'):
+                            clean_text = clean_text_for_pdf(item['text'])
+                            pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                    pdf.ln(2)
+
+            # Strengths
+            if analysis.get('strengths'):
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Strengths", ln=True)
+                pdf.set_font(base_font, size=10)
+                for item in analysis['strengths']:
+                    if isinstance(item, dict) and item.get('text'):
+                        clean_text = clean_text_for_pdf(item['text'])
+                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                pdf.ln(2)
+
+            # Weaknesses
+            if analysis.get('weaknesses'):
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Weaknesses", ln=True)
+                pdf.set_font(base_font, size=10)
+                for item in analysis['weaknesses']:
+                    if isinstance(item, dict) and item.get('text'):
+                        clean_text = clean_text_for_pdf(item['text'])
+                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                pdf.ln(2)
+
+            # Opportunities
+            if analysis.get('opportunities'):
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Opportunities", ln=True)
+                pdf.set_font(base_font, size=10)
+                for item in analysis['opportunities']:
+                    if isinstance(item, dict) and item.get('text'):
+                        clean_text = clean_text_for_pdf(item['text'])
+                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                pdf.ln(2)
+
+            # Threats
+            if analysis.get('threats'):
+                pdf.set_font(base_font, 'B', 12)
+                pdf.cell(0, 8, txt="Threats", ln=True)
+                pdf.set_font(base_font, size=10)
+                for item in analysis['threats']:
+                    if isinstance(item, dict) and item.get('text'):
+                        clean_text = clean_text_for_pdf(item['text'])
+                        pdf.multi_cell(0, 4, txt=f"* {clean_text}")
+                pdf.ln(2)
+
+        # Critical Flags
+        if report_data.get('criticalFlags') and len(report_data['criticalFlags']) > 0:
+            pdf.set_font(base_font, 'B', 12)
+            pdf.cell(0, 8, txt="Critical Red Flags", ln=True)
+            pdf.set_font(base_font, size=10)
             for flag in report_data['criticalFlags']:
                 if isinstance(flag, dict):
-                    title = clean_text_for_pdf(flag.get('title', ''))
-                    explanation = clean_text_for_pdf(flag.get('explanation', ''))
                     pdf.set_font(base_font, 'B', 10)
-                    pdf.multi_cell(0, 5, f"⚠ {title}")
-                    pdf.set_font(base_font, '', 9)
-                    pdf.multi_cell(0, 5, explanation)
+                    clean_title = clean_text_for_pdf(flag.get('title', ''))
+                    pdf.cell(0, 6, txt=clean_title, ln=True)
+                    pdf.set_font(base_font, size=9)
+                    clean_explanation = clean_text_for_pdf(flag.get('explanation', ''))
+                    # Include full explanation content
+                    pdf.multi_cell(0, 4, txt=clean_explanation)
                     if flag.get('source'):
-                        pdf.set_font(base_font, 'I', 9)
-                        pdf.cell(0, 5, f"Source: {clean_text_for_pdf(flag['source'])}", ln=True)
-                    pdf.ln(4)
+                        clean_source = clean_text_for_pdf(flag['source'])
+                        pdf.cell(0, 4, txt=f"Source: {clean_source}", ln=True)
+                    pdf.ln(2)
 
-        # --- Negotiation Points ---
-        if report_data.get('negotiationPoints'):
-            section_title("Negotiation Action Plan")
-            pdf.set_font(base_font, '', 10)
+        # Negotiation Points
+        if report_data.get('negotiationPoints') and len(report_data['negotiationPoints']) > 0:
+            pdf.set_font(base_font, 'B', 12)
+            pdf.cell(0, 8, txt="Negotiation Action Plan", ln=True)
+            pdf.set_font(base_font, size=10)
             for point in report_data['negotiationPoints']:
                 if isinstance(point, dict):
                     pdf.set_font(base_font, 'B', 10)
-                    pdf.multi_cell(0, 5, f"- {clean_text_for_pdf(point.get('title', ''))}")
-                    pdf.set_font(base_font, '', 9)
+                    clean_title = clean_text_for_pdf(point.get('title', ''))
+                    pdf.cell(0, 6, txt=clean_title, ln=True)
+                    pdf.set_font(base_font, size=9)
                     if point.get('risk'):
-                        pdf.multi_cell(0, 5, f"Risk: {clean_text_for_pdf(point['risk'])}")
+                        clean_risk = clean_text_for_pdf(point['risk'])
+                        pdf.cell(0, 4, txt=f"Risk: {clean_risk}", ln=True)
                     if point.get('example'):
-                        pdf.multi_cell(0, 5, f"Suggestion: {clean_text_for_pdf(point['example'])}")
-                    pdf.ln(4)
+                        clean_example = clean_text_for_pdf(point['example'])
+                        pdf.cell(0, 4, txt=f"Suggestion: {clean_example}", ln=True)
+                    pdf.ln(2)
 
-        # --- Save ---
-        tmp_pdf = tempfile.mktemp(suffix=".pdf")
-        pdf.output(tmp_pdf)
-        logging.info(f"Saved CovenantAI PDF to {tmp_pdf}")
+        # Save PDF to temporary file
+        logging.info("Saving PDF to temporary file")
+        tmp_file_path = tempfile.mktemp(suffix='.pdf')
+        pdf.output(tmp_file_path)
+        logging.info(f"PDF saved successfully to: {tmp_file_path}")
 
-        # --- Bundle Option (PDF + TXT ZIP) ---
+        # If bundle requested, also write a UTF-8 text file with the raw analysis and return a zip
         if bundle:
-            raw_text = ''
-            if isinstance(report_data.get('analysis'), dict):
-                raw_text = report_data['analysis'].get('raw_text', '')
-            if not raw_text:
-                raw_text = json.dumps(report_data, ensure_ascii=False, indent=2)
+            try:
+                raw_text = ''
+                if isinstance(report_data.get('analysis'), dict):
+                    raw_text = report_data['analysis'].get('raw_text', '')
+                if not raw_text:
+                    # Fallback to serializing the whole report_data
+                    raw_text = json.dumps(report_data, ensure_ascii=False, indent=2)
 
-            txt_path = tempfile.mktemp(suffix='.txt')
-            with open(txt_path, 'w', encoding='utf-8') as tf:
-                tf.write(raw_text)
+                txt_path = tempfile.mktemp(suffix='.txt')
+                with open(txt_path, 'w', encoding='utf-8') as tf:
+                    tf.write(raw_text)
 
-            zip_path = tempfile.mktemp(suffix='.zip')
-            import zipfile
-            with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
-                zf.write(tmp_pdf, arcname='covenantai-report.pdf')
-                zf.write(txt_path, arcname='covenantai-raw.txt')
+                zip_path = tempfile.mktemp(suffix='.zip')
+                import zipfile
+                with zipfile.ZipFile(zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zf:
+                    zf.write(tmp_file_path, arcname='legal-analysis-report.pdf')
+                    zf.write(txt_path, arcname='legal-analysis-raw.txt')
 
-            return FileResponse(zip_path, media_type='application/zip', filename='covenantai-bundle.zip')
+                logging.info(f"Returning bundled zip: {zip_path}")
+                return FileResponse(
+                    zip_path,
+                    media_type='application/zip',
+                    filename='legal-analysis-report.zip',
+                    headers={"Content-Disposition": "attachment; filename=legal-analysis-report.zip"}
+                )
+            except Exception as e:
+                logging.warning(f"Failed to create bundle zip: {e}")
 
+        # Default: return PDF file
+        filename = "legal-analysis-report.pdf"
+        logging.info(f"Returning PDF file: {filename}")
         return FileResponse(
-            tmp_pdf,
+            tmp_file_path,
             media_type='application/pdf',
-            filename='covenantai-report.pdf',
-            headers={"Content-Disposition": "attachment; filename=covenantai-report.pdf"}
+            filename=filename,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
         )
 
     except Exception as e:
-        logging.error(f"CovenantAI PDF export error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {e}")
+        logging.error(f"PDF export error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {str(e)}")
 
-
-# Export document analysis as PDF (Covenant-style: black & white, symmetric, two-column SWOT)
+# Export document analysis as PDF
 @api_router.get("/documents/{document_id}/export-pdf")
 async def export_document_pdf(document_id: str):
-    """Export document analysis as a downloadable PDF report (minimal, symmetric, monochrome)."""
+    """Export document analysis as a downloadable PDF report"""
     logging.info(f"Starting PDF export for document: {document_id}")
-
     try:
-        import os
-        import tempfile
-        from datetime import datetime
-        import pymongo
-        from fastapi import HTTPException
-        from fastapi.responses import FileResponse
-        from fpdf import FPDF
-        import logging
-
-        # --- Fetch document from DB ---
+        # Get document from database
         sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
         sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
         document = sync_db.documents.find_one({"id": document_id})
-        sync_client.close()
-
         if not document:
+            sync_client.close()
             logging.error(f"Document not found: {document_id}")
             raise HTTPException(status_code=404, detail="Document not found")
 
         if document.get('analysis_status') != 'completed':
+            sync_client.close()
             logging.error(f"Document analysis not completed: {document_id}, status: {document.get('analysis_status')}")
             raise HTTPException(status_code=400, detail="Document analysis not completed yet")
 
@@ -3685,138 +3826,35 @@ async def export_document_pdf(document_id: str):
         risk_assessment = document.get('risk_assessment') or ''
         recommendations = document.get('recommendations') or ''
         key_clauses = document.get('key_clauses') or []
-        analysis = document.get('analysis') or {}
         analysis_text = document.get('summary') or ''
 
+        sync_client.close()
         logging.info(f"Retrieved document data. Summary length: {len(analysis_text)}")
 
-        # --- Helper: Clean text for PDF (unicode-preserving, safe) ---
-        def clean_text_for_pdf(text: str) -> str:
+        # Helper function to clean text for PDF (unicode-preserving)
+        def clean_text_for_pdf(text):
             if not text:
                 return ""
-        
-            t = str(text)
-        
-            # Remove null bytes (can crash PDF writers)
-            t = t.replace('\x00', '')
-        
-            # Replace bullet points and special symbols
-            t = t.replace('•', '*').replace('\u2022', '*')
-            t = t.replace('▪', '*').replace('‣', '*')  # sometimes appear in OCRs
-        
+            text = str(text)
+            # Remove NULs which can break some PDF writers
+            text = text.replace('\x00', '')
+            # Replace bullet points with asterisks
+            text = text.replace('•', '*').replace('\u2022', '*')
             # Replace en/em dashes with hyphens
-            t = t.replace('–', '-').replace('—', '-')
-        
+            text = text.replace('–', '-').replace('—', '-')
             # Normalize smart quotes
-            t = t.replace('\u2018', "'").replace('\u2019', "'")
-            t = t.replace('\u201C', '"').replace('\u201D', '"')
-        
-            # Strip excessive whitespace
-            t = ' '.join(t.split())
-        
-            # Final safeguard: remove any characters that can’t be encoded in Latin-1
-            # (Only needed when fallback font = Arial)
-            try:
-                t.encode('latin-1')
-            except UnicodeEncodeError:
-                t = t.encode('latin-1', errors='ignore').decode('latin-1')
-        
-            return t.strip()
+            text = text.replace('\u2018', "'").replace('\u2019', "'")
+            text = text.replace('\u201C', '"').replace('\u201D', '"')
+            return text
 
-        # --- Monochrome PDF class with header/footer & helpers ---
-        class MonochromePDF(FPDF):
-            def header(self):
-                # Title (centered), thin divider line
-                self.set_font(self.base_font, 'B', 16)
-                self.set_text_color(0, 0, 0)
-                self.cell(0, 10, "LEGAL DOCUMENT ANALYSIS REPORT", ln=True, align='C')
-                self.ln(2)
-                self.set_line_width(0.2)
-                self.set_draw_color(0, 0, 0)
-                self.line(15, 25, 195, 25)
-                self.ln(6)
+        logging.info("Starting PDF generation with FPDF")
+        from fpdf import FPDF
 
-            def footer(self):
-                # Footer with timestamp + page number
-                self.set_y(-15)
-                self.set_font(self.base_font, '', 8)
-                self.set_text_color(0, 0, 0)
-                ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                self.cell(0, 10, f"Generated {ts}  |  Page {self.page_no()}", align='C')
-
-            def section_title(self, title: str):
-                # Left-aligned, uppercased section title with a short divider
-                self.set_font(self.base_font, 'B', 12)
-                self.cell(0, 8, txt=title, ln=True, align='L')
-                self.ln(2)
-                self.set_line_width(0.05)
-                # short centered divider
-                x = self.get_x()
-                y = self.get_y()
-                self.line(60, y, 150, y)
-                self.ln(6)
-
-            def write_paragraph(self, text: str, size: float = 10, leading: float = 5):
-                self.set_font(self.base_font, '', size)
-                self.set_text_color(0, 0, 0)
-                self.multi_cell(0, leading, txt=text)
-                self.ln(4)
-
-            def two_column_lists(self, left_items: list, right_items: list, left_title: str = "", right_title: str = ""):
-                """Render two lists side-by-side. left_items/right_items are lists of strings."""
-                # column widths and start positions
-                page_w = self.w - self.l_margin - self.r_margin
-                col_w = (page_w - 8) / 2  # 8 units gap between columns
-                x_start = self.get_x()
-                y_start = self.get_y()
-
-                max_rows = max(len(left_items), len(right_items))
-
-                # Optional small bold titles inside columns
-                if left_title:
-                    self.set_font(self.base_font, 'B', 11)
-                    self.multi_cell(col_w, 5, left_title, border=0)
-                if right_title:
-                    # move to right column title position
-                    self.set_xy(x_start + col_w + 8, y_start)
-                    self.set_font(self.base_font, 'B', 11)
-                    self.multi_cell(col_w, 5, right_title, border=0)
-                self.ln(2)
-
-                # Reset to start of list rows
-                y_row = self.get_y()
-                for i in range(max_rows):
-                    # Left column
-                    self.set_xy(x_start, y_row)
-                    if i < len(left_items):
-                        self.set_font(self.base_font, '', 10)
-                        self.multi_cell(col_w, 5, f"• {clean_text_for_pdf(left_items[i])}")
-                    else:
-                        # empty spacer
-                        self.multi_cell(col_w, 5, "")
-
-                    # Right column
-                    self.set_xy(x_start + col_w + 8, y_row)
-                    if i < len(right_items):
-                        self.set_font(self.base_font, '', 10)
-                        self.multi_cell(col_w, 5, f"• {clean_text_for_pdf(right_items[i])}")
-                    else:
-                        self.multi_cell(col_w, 5, "")
-
-                    # Advance y_row to the next line (max of current y positions)
-                    y_row = max(self.get_y(), y_row + 5)
-
-                # Move cursor below columns
-                self.set_y(y_row + 6)
-
-        # --- Setup PDF object and fonts ---
-        pdf = MonochromePDF(format='A4')
-        pdf.set_auto_page_break(auto=True, margin=15)
-        # Register DejaVu if present; fallback to Arial
+        pdf = FPDF()
+        # Register and prefer DejaVu for unicode support when available
         try:
             dejavu_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             if os.path.exists(dejavu_path):
-                # Add regular and bold variants (both map to same file if no separate bold)
                 pdf.add_font('DejaVu', '', dejavu_path, uni=True)
                 try:
                     pdf.add_font('DejaVu', 'B', dejavu_path, uni=True)
@@ -3828,90 +3866,65 @@ async def export_document_pdf(document_id: str):
         except Exception:
             base_font = 'Arial'
 
-        # Attach base_font attribute for class methods to use
-        pdf.base_font = base_font
-
-        # Start first page (header uses pdf.base_font)
         pdf.add_page()
-        pdf.set_left_margin(15)
-        pdf.set_right_margin(15)
+        pdf.set_font(base_font, 'B', 16)
+        pdf.cell(0, 10, txt="Legal Document Analysis Report", ln=True, align='C')
+        pdf.ln(5)
 
-        # --- Header meta (centered) ---
-        pdf.set_font(base_font, 'B', 14)
-        pdf.cell(0, 8, "COVENANTAI REPORT", ln=True, align='C')
-        pdf.ln(2)
-        pdf.set_font(base_font, '', 10)
-        pdf.cell(0, 6, f"Document: {document.get('filename', 'Unknown')}", ln=True, align='C')
-        pdf.cell(0, 6, f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
-        pdf.ln(8)
-        pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-        pdf.ln(8)
+        pdf.set_font(base_font, size=11)
+        pdf.cell(0, 8, txt=f"Document: {document.get('filename', 'Unknown')}", ln=True)
+        pdf.cell(0, 8, txt=f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.ln(5)
 
-        # --- Executive / Plain English Summary ---
-        if executive_summary or plain_english:
-            pdf.section_title("Summary")
-            if executive_summary:
-                clean_exec = clean_text_for_pdf(executive_summary)
-                if len(clean_exec) > 3000:
-                    clean_exec = clean_exec[:3000] + " ...[truncated]"
-                pdf.write_paragraph(clean_exec, size=10, leading=5)
-            if plain_english:
-                pdf.write_paragraph(clean_text_for_pdf(plain_english), size=10, leading=5)
+        # Add content sections
+        sections = [
+            ("Executive Summary", executive_summary),
+            ("Plain English Summary", plain_english),
+            ("Risk Assessment", risk_assessment),
+            ("Recommendations", recommendations)
+        ]
 
-        # --- Risk Assessment ---
-        if risk_assessment:
-            pdf.section_title("Risk Assessment")
-            pdf.write_paragraph(clean_text_for_pdf(risk_assessment), size=10, leading=5)
+        for section_title, section_content in sections:
+            if section_content and len(section_content.strip()) > 0:
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(0, 8, txt=section_title, ln=True)
+                pdf.set_font("Arial", size=10)
+                
+                clean_content = clean_text_for_pdf(section_content)
+                # Allow the full section content to be written; multi_cell handles paging
+                pdf.multi_cell(0, 4, txt=clean_content)
+                pdf.ln(3)
 
-        # --- Recommendations ---
-        if recommendations:
-            pdf.section_title("Recommendations")
-            pdf.write_paragraph(clean_text_for_pdf(recommendations), size=10, leading=5)
-
-        # --- SWOT / Two-column rendering if strengths/weaknesses exist ---
-        strengths = []
-        weaknesses = []
-        if isinstance(analysis, dict):
-            # Support both structured list items and simple lists of strings
-            if analysis.get('strengths'):
-                for it in analysis['strengths']:
-                    if isinstance(it, dict):
-                        strengths.append(it.get('text', ''))
-                    else:
-                        strengths.append(str(it))
-            if analysis.get('weaknesses'):
-                for it in analysis['weaknesses']:
-                    if isinstance(it, dict):
-                        weaknesses.append(it.get('text', ''))
-                    else:
-                        weaknesses.append(str(it))
-
-        if strengths or weaknesses:
-            pdf.section_title("SWOT (Strengths vs Weaknesses)")
-            # Use two-column rendering
-            pdf.two_column_lists(left_items=strengths, right_items=weaknesses,
-                                 left_title="Strengths", right_title="Weaknesses")
-
-        # --- Key Clauses ---
-        if key_clauses:
-            pdf.section_title("Key Clauses Analysis")
+    # Add key clauses if available
+        if key_clauses and len(key_clauses) > 0:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(0, 8, txt="Key Clauses Analysis", ln=True)
+            pdf.set_font("Arial", size=10)
+            
             for clause in key_clauses:
                 if clause.get('clause'):
-                    pdf.set_font(base_font, 'B', 10)
-                    pdf.multi_cell(0, 5, f"Clause: {clean_text_for_pdf(clause['clause'][:200])}")
+                    clean_clause = clean_text_for_pdf(clause['clause'])
+                    pdf.set_font("Arial", 'B', 10)
+                    pdf.cell(0, 6, txt=f"Clause: {clean_clause[:100]}", ln=True)
+                    
                     if clause.get('explanation'):
-                        pdf.set_font(base_font, '', 9)
-                        pdf.multi_cell(0, 4.5, clean_text_for_pdf(clause.get('explanation', '')))
-                    pdf.ln(3)
+                        pdf.set_font("Arial", size=9)
+                        clean_explanation = clean_text_for_pdf(clause['explanation'])
+                        # Include full clause explanation content
+                        pdf.multi_cell(0, 4, txt=clean_explanation)
+                    pdf.ln(2)
 
-        # --- Save PDF to temporary file ---
+        # Save PDF to temporary file
+        logging.info("Saving PDF to temporary file")
         tmp_file_path = tempfile.mktemp(suffix='.pdf')
         pdf.output(tmp_file_path)
+        
         logging.info(f"PDF saved successfully to: {tmp_file_path}")
 
         # Return PDF file
-        filename = f"covenant_report_{document_id}.pdf"
+        filename = f"legal_analysis_{document_id}.pdf"
         logging.info(f"Returning PDF file: {filename}")
+        
         return FileResponse(
             tmp_file_path,
             media_type='application/pdf',
@@ -3920,7 +3933,6 @@ async def export_document_pdf(document_id: str):
         )
 
     except HTTPException:
-        # re-raise known HTTP exceptions
         raise
     except Exception as e:
         logging.error(f"PDF export error: {str(e)}", exc_info=True)
