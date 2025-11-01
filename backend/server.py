@@ -3694,17 +3694,33 @@ async def export_document_pdf(document_id: str):
         def clean_text_for_pdf(text: str) -> str:
             if not text:
                 return ""
+        
             t = str(text)
-            # Remove NULs which can break some PDF writers
+        
+            # Remove null bytes (can crash PDF writers)
             t = t.replace('\x00', '')
-            # Replace bullet points with asterisks
+        
+            # Replace bullet points and special symbols
             t = t.replace('•', '*').replace('\u2022', '*')
+            t = t.replace('▪', '*').replace('‣', '*')  # sometimes appear in OCRs
+        
             # Replace en/em dashes with hyphens
             t = t.replace('–', '-').replace('—', '-')
-            # Normalize smart quotes to ASCII equivalents
+        
+            # Normalize smart quotes
             t = t.replace('\u2018', "'").replace('\u2019', "'")
             t = t.replace('\u201C', '"').replace('\u201D', '"')
-            # Trim and collapse trailing whitespace
+        
+            # Strip excessive whitespace
+            t = ' '.join(t.split())
+        
+            # Final safeguard: remove any characters that can’t be encoded in Latin-1
+            # (Only needed when fallback font = Arial)
+            try:
+                t.encode('latin-1')
+            except UnicodeEncodeError:
+                t = t.encode('latin-1', errors='ignore').decode('latin-1')
+        
             return t.strip()
 
         # --- Monochrome PDF class with header/footer & helpers ---
