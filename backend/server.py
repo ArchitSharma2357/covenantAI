@@ -502,7 +502,7 @@ class Document(BaseModel):
     analysis_status: str = "pending"  # pending, processing, completed, failed
     content: Optional[str] = None  # Extracted document text
     metadata: Optional[dict] = None  # Storage for content stats and extraction info
-    summary: Optional[str] = None  # Executive summary
+    : Optional[str] = None  # Executive 
     key_points: Optional[List[dict]] = None  # Key points extracted from the document
     key_clauses: Optional[List[dict]] = None  # Important clauses found
     risk_assessment: Optional[dict] = None  # Structured risk assessment
@@ -833,12 +833,12 @@ async def send_message(prompt: str, mode: str = "general", context: str = "") ->
         # If the prompt looks like a long document, return a short structured analysis
         text = p.strip()
         if len(text) > 2000 or '\n' in text and len(text) > 400:
-            # Very short heuristic analysis: executive summary + key points
-            summary = text[:800].strip()
+            # Very short heuristic analysis: executive  + key points
+             = text[:800].strip()
             return (
-                "EXECUTIVE SUMMARY: This document appears to be a legal text. "
+                "EXECUTIVE : This document appears to be a legal text. "
                 "A quick read indicates the main topics and obligations are: "
-                f"{summary[:300]}...\n\nKEY POINTS: (1) Check parties and dates; (2) Look for termination and liability clauses; (3) Identify obligations and deliverables."
+                f"{[:300]}...\n\nKEY POINTS: (1) Check parties and dates; (2) Look for termination and liability clauses; (3) Identify obligations and deliverables."
             )
 
         # If it's a question-style prompt, reply concisely
@@ -1550,7 +1550,7 @@ Remember: Base your entire answer solely on the document content. Quote relevant
             if document:
                 document_metadata = {
                     "filename": document.get("filename"),
-                    "summary": document.get("summary", "")[:500],  # Store a snippet of the summary
+                    "summary": document.get("summary", "")[:1000],  # Store a snippet of the summary
                     "content_length": len(document.get("content", "") or document.get("document_text", ""))
                 }
         
