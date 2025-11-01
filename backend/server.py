@@ -831,7 +831,7 @@ async def send_message(prompt: str, mode: str = "general", context: str = "") ->
             return (
                 "EXECUTIVE : This document appears to be a legal text. "
                 "A quick read indicates the main topics and obligations are: "
-                f"{[:300]}...\n\nKEY POINTS: (1) Check parties and dates; (2) Look for termination and liability clauses; (3) Identify obligations and deliverables."
+                f"{summary[:800]}...\n\nKEY POINTS: (1) Check parties and dates; (2) Look for termination and liability clauses; (3) Identify obligations and deliverables."
             )
 
         # If it's a question-style prompt, reply concisely
