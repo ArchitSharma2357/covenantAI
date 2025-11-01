@@ -548,7 +548,7 @@ const ChatPage = () => {
                   Ask me questions about legal documents, contracts, compliance, or any legal matters.
                 </p>
                 <p className="text-sm font-bold text-red-500 max-w-md mx-auto mb-4">
-                  Important: Refresh 5-10 seconds after uploading. Some OCR documents may not work properly.
+                  Important: REFRESH 20-30 seconds after uploading. Some OCR documents may not work properly.
                 </p>
 
                 {/* removed redundant upload prompt for document chat mode per UX request */}
@@ -560,7 +560,6 @@ const ChatPage = () => {
               const isUser = message.role === 'user';
               const longMessage = message.content && message.content.length > 700;
               const isExpanded = !!expandedMessages[index];
-              // This makes all assistant bubbles wider, regardless of chat mode
               const bubbleMaxWidth = isAssistant ? 'max-w-[92%]' : 'max-w-[70%]';
 
               return (
