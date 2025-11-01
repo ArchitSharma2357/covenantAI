@@ -2650,16 +2650,6 @@ def generate_analysis_prompt(text: str) -> str:
         "5. Ensure output is valid JSON"
     )
 
-# Placeholder extraction helpers - replace with real implementations
-def extract_text_pdf_fallback(path: str) -> str:
-    return ""
-
-def extract_text_with_ocr(path: str) -> str:
-    return ""
-
-def extract_text_docx(path: str) -> str:
-    return ""
-
 @api_router.post("/documents/{document_id}/analyze")
 async def analyze_document(document_id: str, request: Request = None):
     """Analyze a document with the given ID. The request parameter is optional and only used for auth."""
@@ -3952,93 +3942,7 @@ async def export_document_pdf(document_id: str):
     except Exception as e:
         logging.error(f"PDF export error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {str(e)}")
-
-# Google OAuth endpoints
-@api_router.get("/auth/google")
-async def google_auth():
-    """Initiate Google OAuth flow"""
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="Google OAuth not configured")
-
-    auth_url = (
-        "https://accounts.google.com/o/oauth2/v2/auth?"
-        f"client_id={GOOGLE_CLIENT_ID}&"
-        "response_type=code&"
-        f"redirect_uri={GOOGLE_REDIRECT_URI}&"
-        "scope=email%20profile&"
-        "state=google_signin"
-    )
-    return {"auth_url": auth_url}
-
-@api_router.get("/auth/google/callback")
-async def google_auth_callback(code: str, state: str):
-    """Handle Google OAuth callback"""
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="Google OAuth not configured")
-
-    # Exchange code for access token
-    token_url = "https://oauth2.googleapis.com/token"
-    token_data = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "code": code,
-        "grant_type": "authorization_code",
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-    }
-
-    try:
-        token_response = requests.post(token_url, data=token_data)
-        token_response.raise_for_status()
-        token_json = token_response.json()
-
-        # Get user info
-        user_info_url = "https://www.googleapis.com/oauth2/v2/userinfo"
-        headers = {"Authorization": f"Bearer {token_json['access_token']}"}
-        user_response = requests.get(user_info_url, headers=headers)
-        user_response.raise_for_status()
-        user_info = user_response.json()
-
-        # Check if user exists, create if not
-        sync_client = pymongo.MongoClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
-        sync_db = sync_client[os.environ.get('DB_NAME', 'legal_docs')]
-        users_collection = sync_db.users
-
-        existing_user = users_collection.find_one({"google_id": user_info["id"]})
-        if not existing_user:
-            user_doc = {
-                "id": str(uuid.uuid4()),
-                "email": user_info["email"],
-                "name": user_info["name"],
-                "google_id": user_info["id"],
-                "created_at": datetime.now(timezone.utc)
-            }
-            users_collection.insert_one(user_doc)
-            user = user_doc
-        else:
-            user = existing_user
-
-        sync_client.close()
-
-        # Create JWT token
-        access_token = create_access_token(
-            data={"sub": user["id"], "email": user["email"]},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": {
-                "id": user["id"],
-                "email": user["email"],
-                "name": user["name"]
-            }
-        }
-
-    except requests.RequestException as e:
-        logging.error(f"OAuth error: {e}")
-        raise HTTPException(status_code=400, detail="OAuth authentication failed")
-
+        
 # Then include the router in the main app
 app.include_router(api_router)
 
