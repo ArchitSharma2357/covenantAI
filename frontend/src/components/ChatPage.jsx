@@ -560,7 +560,8 @@ const ChatPage = () => {
               const isUser = message.role === 'user';
               const longMessage = message.content && message.content.length > 700;
               const isExpanded = !!expandedMessages[index];
-              const bubbleMaxWidth = chatMode === 'document' && isAssistant ? 'max-w-[92%]' : 'max-w-[70%]';
+              // This makes all assistant bubbles wider, regardless of chat mode
+              const bubbleMaxWidth = isAssistant ? 'max-w-[92%]' : 'max-w-[70%]';
 
               return (
                 <div key={index} className={`flex items-start space-x-3 ${isUser ? 'justify-end space-x-reverse' : 'justify-start'}`}>
@@ -571,7 +572,7 @@ const ChatPage = () => {
                   )}
 
           <div className={`${bubbleMaxWidth} rounded-lg p-4 ${isUser ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted text-foreground'}`}>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+            <p className="text-base leading-relaxed whitespace-pre-wrap break-words">
                       {isAssistant && chatMode === 'document' && longMessage && !isExpanded
                         ? `${message.content.slice(0, 700)}...`
                         : message.content}
