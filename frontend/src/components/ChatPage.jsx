@@ -558,7 +558,7 @@ const ChatPage = () => {
             {messages.map((message, index) => {
               const isAssistant = message.role === 'assistant';
               const isUser = message.role === 'user';
-              const longMessage = message.content && message.content.length > 400;
+              const longMessage = message.content && message.content.length > 700;
               const isExpanded = !!expandedMessages[index];
               const bubbleMaxWidth = chatMode === 'document' && isAssistant ? 'max-w-[92%]' : 'max-w-[70%]';
 
@@ -573,7 +573,7 @@ const ChatPage = () => {
           <div className={`${bubbleMaxWidth} rounded-lg p-4 ${isUser ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted text-foreground'}`}>
             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {isAssistant && chatMode === 'document' && longMessage && !isExpanded
-                        ? `${message.content.slice(0, 400)}...`
+                        ? `${message.content.slice(0, 700)}...`
                         : message.content}
                     </p>
 
