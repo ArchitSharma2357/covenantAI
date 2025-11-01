@@ -495,7 +495,7 @@ class Document(BaseModel):
     analysis_status: str = "pending"  # pending, processing, completed, failed
     content: Optional[str] = None  # Extracted document text
     metadata: Optional[dict] = None  # Storage for content stats and extraction info
-    : Optional[str] = None  # Executive 
+    summary: Optional[str] = None  # Executive summary
     key_points: Optional[List[dict]] = None  # Key points extracted from the document
     key_clauses: Optional[List[dict]] = None  # Important clauses found
     risk_assessment: Optional[dict] = None  # Structured risk assessment
