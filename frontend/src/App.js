@@ -385,16 +385,6 @@ function AppContent() {
             <Route path="/compare" element={<ComparePage />} />
           </Routes>
         </main>
-        {/* Floating Action Button */}
-        {showFAB && (
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('openUpload'))}
-            className="fixed right-8 bottom-8 z-[130] bg-black text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
-            title="Upload / Add Document"
-          >
-            <Plus className="w-6 h-6" />
-          </button>
-        )}
       </div>
     </div>
   );
